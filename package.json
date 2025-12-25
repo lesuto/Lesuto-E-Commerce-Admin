@@ -2,30 +2,22 @@
   "name": "Lesuto-E-Commerce-Admin",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev:server": "ts-node ./src/index.ts",
-    "dev:worker": "ts-node ./src/index-worker.ts",
-    "dev:dashboard": "vite --clearScreen false",
-    "dev": "concurrently --kill-others npm:dev:*",
-    "build": "tsc",
-    "build:dashboard": "vite build",
-    "start:server": "node ./dist/index.js",
-    "start:worker": "node ./dist/index-worker.js",
-    "start": "concurrently npm:start:*"
-  },
-  "dependencies": {
-    "@vendure/asset-server-plugin": "3.5.2",
-    "@vendure/core": "3.5.2",
-    "@vendure/dashboard": "3.5.2",
-    "@vendure/email-plugin": "3.5.2",
-    "@vendure/graphiql-plugin": "3.5.2",
-    "dotenv": "17.2.3",
-    "pg": "8.16.3"
+    "dev": "concurrently -n server,storefront -c blue,magenta \"npm run dev -w server\" \"npm run dev -w storefront\"",
+    "dev:server": "npm run dev -w server",
+    "dev:storefront": "npm run dev -w storefront",
+    "build": "npm run build -w server && npm run build -w storefront",
+    "build:server": "npm run build -w server",
+    "build:storefront": "npm run build -w storefront",
+    "start": "concurrently -n server,storefront -c blue,magenta \"npm run start -w server\" \"npm run start -w storefront\"",
+    "start:server": "npm run start -w server",
+    "start:storefront": "npm run start -w storefront"
   },
   "devDependencies": {
-    "@vendure/cli": "3.5.2",
-    "concurrently": "9.2.1",
-    "typescript": "5.8.2"
-  },
-  "packageManager": "yarn@4.12.0"
+    "concurrently": "^9.0.0"
+  }
 }
+
