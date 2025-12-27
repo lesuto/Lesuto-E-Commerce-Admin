@@ -40,19 +40,35 @@ export const config: VendureConfig = {
         },
         requireVerification: false
     },
+    // Local
+    // dbConnectionOptions: {
+    //     type: 'postgres',
+    //     // See the README.md "Migrations" section for an explanation of
+    //     // the `synchronize` and `migrations` options.
+    //     synchronize: false,
+    //     migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
+    //     logging: false,
+    //     database: process.env.DB_NAME,
+    //     schema: process.env.DB_SCHEMA,
+    //     host: process.env.DB_HOST,
+    //     port: +process.env.DB_PORT,
+    //     username: process.env.DB_USERNAME,
+    //     password: process.env.DB_PASSWORD,
+    // },
     dbConnectionOptions: {
         type: 'postgres',
-        // See the README.md "Migrations" section for an explanation of
-        // the `synchronize` and `migrations` options.
+        // Use the connection string from .env
+        url: process.env.DATABASE_URL,
+        
+        // Supabase requires SSL. This setting fixes the "self-signed certificate" error.
+        ssl: {
+            rejectUnauthorized: false,
+        },
+        
         synchronize: false,
         migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
         logging: false,
-        database: process.env.DB_NAME,
-        schema: process.env.DB_SCHEMA,
-        host: process.env.DB_HOST,
-        port: +process.env.DB_PORT,
-        username: process.env.DB_USERNAME,
-        password: process.env.DB_PASSWORD,
+        schema: process.env.DB_SCHEMA || 'public',
     },
     paymentOptions: {
         paymentMethodHandlers: [dummyPaymentHandler],
