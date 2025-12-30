@@ -44,7 +44,16 @@ export function MarketplaceComponent() {
     // Use TanStack Query for fetching
     const { data, isLoading: loading, error, refetch } = useQuery({
         queryKey: ['marketplaceSuppliers'],
-        queryFn: () => api.query(GET_MARKETPLACE_SUPPLIERS, {}), // No variables needed
+        queryFn: async () => {
+            try {
+                const result = await api.query(GET_MARKETPLACE_SUPPLIERS, {});
+                console.log('Query result:', result); // Log the fetched data
+                return result;
+            } catch (err) {
+                console.error('Query error:', err); // Log any fetch errors
+                throw err;
+            }
+        },
     });
 
     // Use TanStack Mutation for mutations
@@ -56,6 +65,7 @@ export function MarketplaceComponent() {
     const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
 
     const suppliers = data?.marketplaceSuppliers || [];
+    console.log('Suppliers array:', suppliers); // Log the processed suppliers
 
     const handleSubscribe = async (id: string, name: string) => {
         try {
@@ -81,7 +91,7 @@ export function MarketplaceComponent() {
                 ) : error ? (
                     <div className="p-8 text-red-600">Error: {error.message}</div>
                 ) : (
-                    <PageBlock>
+                    <PageBlock column="main" blockId="marketplace-block">
                         <div className="max-w-7xl mx-auto">
                             <div className="mb-8">
                                 <p className="text-lg text-gray-600">

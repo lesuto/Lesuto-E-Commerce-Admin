@@ -23,12 +23,12 @@ export class MarketplaceService {
     async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
         // 1. Assign Product
         await this.channelService.assignToChannels(ctx, Product, productId, [targetChannelId]);
-       
+        
         // 2. Assign Variants
         const product = await this.connection.getEntityOrThrow(ctx, Product, productId, {
             relations: ['variants']
         });
-       
+        
         if (product.variants.length > 0) {
             for (const variant of product.variants) {
                 await this.channelService.assignToChannels(ctx, ProductVariant, variant.id, [targetChannelId]);
@@ -38,7 +38,7 @@ export class MarketplaceService {
 
     async subscribeToSupplier(ctx: RequestContext, supplierChannelId: ID) {
         const sellerChannelId = ctx.channelId;
-        
+         
         // 1. Create Subscription
         const existing = await this.connection.getRepository(ctx, SupplierSubscription).findOne({
             where: {
@@ -62,21 +62,21 @@ export class MarketplaceService {
             .leftJoin('product.channels', 'channel')
             .where('channel.id = :supplierId', { supplierId: supplierChannelId })
             .getMany();
-       
+         
         // 3. Assign them
         for (const product of supplierProducts) {
-             await this.assignProductToChannel(ctx, product.id, sellerChannelId);
+            await this.assignProductToChannel(ctx, product.id, sellerChannelId);
         }
 
         return { success: true };
     }
 
     async getMarketplaceSuppliers(ctx: RequestContext) {
-        // Find channels where type = supplier AND isApproved = true
+        // Find channels where isSupplier = true AND isMarketplaceApproved = true
+        // Use actual custom field column names from DB (prefixed with 'customFields' + PascalCase name)
         return this.connection.getRepository(ctx, Channel).createQueryBuilder('channel')
-            .leftJoinAndSelect('channel.customFields.logo', 'logo')
-            .where("channel.customFields ->> 'isSupplier' = :isSupplier", { isSupplier: 'true' })
-            .andWhere("channel.customFields ->> 'isMarketplaceApproved' = :approved", { approved: 'true' })
+            .where('channel."customFieldsIssupplier" = :isSupplier', { isSupplier: true })
+            .andWhere('channel."customFieldsIsmarketplaceapproved" = :approved', { approved: true })
             .getMany();
     }
 }
