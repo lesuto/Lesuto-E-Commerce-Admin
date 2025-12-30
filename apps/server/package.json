@@ -7,27 +7,39 @@
     "dev:worker": "ts-node ./src/index-worker.ts",
     "dev:dashboard": "vite --clearScreen false",
     "dev": "concurrently --kill-others npm:dev:*",
-    "build": "tsc",
+    "build": "tsc && npm run build:admin-ui",
+    "build:admin-ui": "ts-node ./src/admin-ui.ts",
     "build:dashboard": "vite build",
     "start:server": "node ./dist/index.js",
     "start:worker": "node ./dist/index-worker.js",
     "start": "concurrently npm:start:*"
   },
   "dependencies": {
+    "@apollo/client": "^3.14.0",
     "@aws-sdk/client-dynamodb": "^3.958.0",
     "@aws-sdk/util-dynamodb": "^3.958.0",
+    "@tanstack/react-query": "^5.90.16",
     "@vendure/asset-server-plugin": "3.5.2",
     "@vendure/core": "3.5.2",
     "@vendure/dashboard": "3.5.2",
     "@vendure/email-plugin": "3.5.2",
     "@vendure/graphiql-plugin": "3.5.2",
     "dotenv": "^17.2.3",
+    "graphql": "^16.12.0",
     "pg": "8.16.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "stream-chat": "^9.27.2"
   },
   "devDependencies": {
     "@vendure/cli": "3.5.2",
+    "@vendure/ui-devkit": "^3.5.2",
     "concurrently": "9.2.1",
     "typescript": "5.8.2"
-  }
+  },
+  "description": "This project was generated with [`@vendure/create`](https://github.com/vendure-ecommerce/vendure/tree/master/packages/create).",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
