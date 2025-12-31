@@ -19,6 +19,7 @@
     "@aws-sdk/client-dynamodb": "^3.958.0",
     "@aws-sdk/util-dynamodb": "^3.958.0",
     "@tanstack/react-query": "^5.90.16",
+    "@vendure/admin-ui-plugin": "^3.5.2",
     "@vendure/asset-server-plugin": "3.5.2",
     "@vendure/core": "3.5.2",
     "@vendure/dashboard": "3.5.2",

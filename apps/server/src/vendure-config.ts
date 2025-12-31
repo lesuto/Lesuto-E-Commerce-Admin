@@ -14,12 +14,18 @@ import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@ven
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
+import { AdminUiPlugin } from '@vendure/admin-ui-plugin';
+import { ThemePlugin } from './plugins/theme/theme-plugin'; // Import your plugin
+
+// 1. ADD THIS IMPORT
+import { compileUiExtensions } from '@vendure/ui-devkit/compiler'; 
 import 'dotenv/config';
 import path from 'path';
 import { CmsPlugin } from './plugins/cms/cms.plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
+
 export const config: VendureConfig = {
     apiOptions: {
         port: serverPort,
@@ -57,7 +63,7 @@ export const config: VendureConfig = {
         paymentMethodHandlers: [dummyPaymentHandler],
     },
     plugins: [
-        // ADDED: Marketplace Plugin
+        ThemePlugin,
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({
             route: 'assets',
@@ -87,6 +93,6 @@ export const config: VendureConfig = {
                 : path.join(__dirname, 'dashboard'),
         }),
         OwnershipPlugin,
-        MarketplacePlugin.init({})
+        MarketplacePlugin.init({}),
     ],
 };
