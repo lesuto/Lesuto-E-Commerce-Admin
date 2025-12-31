@@ -4,24 +4,26 @@ import {
     DefaultSchedulerPlugin,
     DefaultSearchPlugin,
     VendureConfig,
-    LanguageCode
+    LanguageCode,
+    Permission
 } from '@vendure/core';
-// import { MultivendorPlugin } from './plugins/multivendor-plugin/multivendor.plugin';
 import { OwnershipPlugin } from './plugins/ownership/ownership.plugin';
-// ADDED: Import the Marketplace Plugin
 import { MarketplacePlugin } from './plugins/marketplace/marketplace.plugin';
 import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@vendure/email-plugin';
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
-import { AdminUiPlugin } from '@vendure/admin-ui-plugin';
-import { ThemePlugin } from './plugins/theme/theme-plugin'; // Import your plugin
+import { ThemePlugin } from './plugins/theme/theme-plugin';
+import { ProductChannelPlugin } from './plugins/custom-permissions';
+import { CmsPlugin } from './plugins/cms/cms.plugin';
 
-// 1. ADD THIS IMPORT
+// --- ADDED: Essential for compiling your UI ---
+import { AdminUiPlugin } from '@vendure/admin-ui-plugin';
 import { compileUiExtensions } from '@vendure/ui-devkit/compiler'; 
+// ----------------------------------------------
+
 import 'dotenv/config';
 import path from 'path';
-import { CmsPlugin } from './plugins/cms/cms.plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -94,5 +96,6 @@ export const config: VendureConfig = {
         }),
         OwnershipPlugin,
         MarketplacePlugin.init({}),
+        ProductChannelPlugin,
     ],
 };
