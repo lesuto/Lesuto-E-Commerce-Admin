@@ -1,17 +1,18 @@
 import { Button, defineDashboardExtension, Page, PageBlock, PageLayout, PageTitle } from '@vendure/dashboard';
 import { useState } from 'react';
 
+
 defineDashboardExtension({
     routes: [
         // Here's a custom page so you can test that your Dashboard extensions are working.
         // You should be able to access this page via the "Catalog > Test Page" nav menu item.
         {
-            path: '/test',
-            loader: () => ({ breadcrumb: 'Test Page' }),
+            path: '/seller/account/profile',
+            loader: () => ({ breadcrumb: 'Seller / Account / Profile' }),
             navMenuItem: {
-                id: 'test',
-                title: 'Test Page',
-                sectionId: 'catalog',
+                id: 'seller_account_profile',
+                title: 'Seller Profile',
+                sectionId: 'seller_account',
             },
             component: () => {
                 const [count, setCount] = useState(0);
@@ -38,7 +39,6 @@ defineDashboardExtension({
     // to give you an idea of all the ways that the Dashboard
     // can be extended. Feel free to delete any that you don't need.
     pageBlocks: [],
-    navSections: [],
     actionBarItems: [],
     alerts: [],
     widgets: [],

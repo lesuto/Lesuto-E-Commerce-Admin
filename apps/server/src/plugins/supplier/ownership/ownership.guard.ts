@@ -10,7 +10,7 @@ import {
 import { DEFAULT_CHANNEL_CODE } from '@vendure/common/lib/shared-constants';
 
 @Injectable()
-export class OwnershipGuard implements CanActivate {
+export class SupplierOwnershipGuard implements CanActivate {
   constructor(private connection: TransactionalConnection) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

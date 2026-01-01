@@ -7,23 +7,26 @@ import {
     LanguageCode,
     Permission
 } from '@vendure/core';
-import { OwnershipPlugin } from './plugins/ownership/ownership.plugin';
-import { MarketplacePlugin } from './plugins/marketplace/marketplace.plugin';
 import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@vendure/email-plugin';
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
 import { ThemePlugin } from './plugins/theme/theme-plugin';
 import { ProductChannelPlugin } from './plugins/custom-permissions';
-import { CmsPlugin } from './plugins/cms/cms.plugin';
 
-// --- ADDED: Essential for compiling your UI ---
-import { AdminUiPlugin } from '@vendure/admin-ui-plugin';
-import { compileUiExtensions } from '@vendure/ui-devkit/compiler'; 
-// ----------------------------------------------
+import { MarketplacePlugin } from './plugins/seller/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
+
+import { SellerInventoryPlugin } from './plugins/seller/store/inventory/inventory.plugin';
+import { SellerProfilePlugin } from './plugins/seller/account/profile/profile.plugin';
+import { SellerBillingPlugin } from './plugins/seller/account/billing/billing.plugin';
+
+import { SupplierOwnershipPlugin } from './plugins/supplier/ownership/ownership.plugin';
+
+import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
 
 import 'dotenv/config';
 import path from 'path';
+
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -66,6 +69,7 @@ export const config: VendureConfig = {
     },
     plugins: [
         ThemePlugin,
+        NavigationPlugin.init({}),
         GraphiqlPlugin.init(),
         AssetServerPlugin.init({
             route: 'assets',
@@ -94,8 +98,11 @@ export const config: VendureConfig = {
                 ? path.join(__dirname, '../dist/dashboard')
                 : path.join(__dirname, 'dashboard'),
         }),
-        OwnershipPlugin,
-        MarketplacePlugin.init({}),
         ProductChannelPlugin,
+        SupplierOwnershipPlugin,
+        MarketplacePlugin.init({}),
+        SellerInventoryPlugin.init({}),
+        SellerBillingPlugin.init({}),
+        SellerProfilePlugin.init({}),
     ],
 };

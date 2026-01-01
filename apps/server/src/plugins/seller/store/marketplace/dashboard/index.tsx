@@ -1,5 +1,6 @@
 import { defineDashboardExtension } from '@vendure/dashboard';
-import { MarketplaceComponent } from './components/MarketplaceComponent';
+import { MarketplaceComponent } from './marketplace';
+import { ShoppingCartIcon } from 'lucide-react';
 
 export default defineDashboardExtension({
     routes: [
@@ -9,17 +10,12 @@ export default defineDashboardExtension({
             navMenuItem: {
                 id: 'marketplace',
                 title: 'Marketplace',
-                sectionId: 'catalog',
+                sectionId: 'seller_store',
             },
             component: MarketplaceComponent,
         },
     ],
     // Placeholders
-    pageBlocks: [], navSections: [], actionBarItems: [], alerts: [], widgets: [], 
+    pageBlocks: [], actionBarItems: [], alerts: [], widgets: [], 
     customFormComponents: {}, dataTables: [], detailForms: [], login: {}, historyEntries: [],
 });
-
-// id: 'marketplace',
-// title: 'Marketplace',
-// sectionId: 'sales', 
-// icon: 'store',

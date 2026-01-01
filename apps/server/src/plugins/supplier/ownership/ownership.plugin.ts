@@ -1,17 +1,17 @@
 import { PluginCommonModule, VendurePlugin, LanguageCode } from '@vendure/core';
 import { APP_GUARD } from '@nestjs/core'; // Ensure this is imported
 import { Global } from '@nestjs/common'; // <--- Import Global
-import { OwnershipListeners } from './ownership.listeners';
-import { OwnershipGuard } from './ownership.guard';
+import { SupplierOwnershipListeners } from './ownership.listeners';
+import { SupplierOwnershipGuard } from './ownership.guard';
 
 @Global() // <--- Add this decorator
 @VendurePlugin({
   imports: [PluginCommonModule],
   providers: [
-    OwnershipListeners,
+    SupplierOwnershipListeners,
     {
       provide: APP_GUARD,
-      useClass: OwnershipGuard,
+      useClass: SupplierOwnershipGuard,
     },
   ],
   configuration: config => {
@@ -40,4 +40,4 @@ import { OwnershipGuard } from './ownership.guard';
     return config;
   },
 })
-export class OwnershipPlugin {}
+export class SupplierOwnershipPlugin {}

@@ -19,7 +19,7 @@ declare module '@vendure/core/dist/entity/custom-entity-fields' {
 }
 
 @Injectable()
-export class OwnershipListeners implements OnModuleInit {
+export class SupplierOwnershipListeners implements OnModuleInit {
   constructor(
     private eventBus: EventBus,
     private connection: TransactionalConnection 

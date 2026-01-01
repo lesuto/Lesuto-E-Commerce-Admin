@@ -1,13 +1,10 @@
 import { PluginCommonModule, Type, VendurePlugin } from '@vendure/core';
-
-import { CMS_PLUGIN_OPTIONS } from './constants';
+import { SELLER_INVENTORY_PLUGIN_OPTIONS } from './constants';
 import { PluginInitOptions } from './types';
-import { Article } from './entities/article.entity';
-import { ArticleService } from './services/article.service';
 
 @VendurePlugin({
     imports: [PluginCommonModule],
-    providers: [{ provide: CMS_PLUGIN_OPTIONS, useFactory: () => CmsPlugin.options }, ArticleService],
+    providers: [{ provide: SELLER_INVENTORY_PLUGIN_OPTIONS, useFactory: () => SellerInventoryPlugin.options }],
     configuration: config => {
         // Plugin-specific configuration
         // such as custom fields, custom permissions,
@@ -16,14 +13,13 @@ import { ArticleService } from './services/article.service';
         return config;
     },
     compatibility: '^3.0.0',
-    entities: [Article],
     dashboard: './dashboard/index.tsx',
 })
-export class CmsPlugin {
+export class SellerInventoryPlugin {
     static options: PluginInitOptions;
 
-    static init(options: PluginInitOptions): Type<CmsPlugin> {
+    static init(options: PluginInitOptions): Type<SellerInventoryPlugin> {
         this.options = options;
-        return CmsPlugin;
+        return SellerInventoryPlugin;
     }
 }
