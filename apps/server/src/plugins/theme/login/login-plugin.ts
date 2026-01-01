@@ -4,6 +4,6 @@ import path from 'path';
 @VendurePlugin({
     imports: [],
     // This tells Vendure: "I have a React extension at this path"
-    dashboard: './logo-extension', 
+    dashboard: './login-extension', 
 })
 export class ThemePlugin {}

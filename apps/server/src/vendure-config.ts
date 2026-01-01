@@ -11,7 +11,7 @@ import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@ven
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
-import { ThemePlugin } from './plugins/theme/theme-plugin';
+import { ThemePlugin } from './plugins/theme/login/login-plugin';
 import { ProductChannelPlugin } from './plugins/custom-permissions';
 
 import { MarketplacePlugin } from './plugins/seller/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)

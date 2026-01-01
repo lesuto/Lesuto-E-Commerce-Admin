@@ -1,6 +1,6 @@
 import { defineDashboardExtension } from '@vendure/dashboard';
 import React, { useState } from 'react';
-import './admin-theme.css'; // Imports the CSS for rainbow effects, logo, and background
+import './login-theme.css'; // Imports the CSS for rainbow effects, logo, and background
 
 const ChameleonLogin = () => {
     const [username, setUsername] = useState('');
