@@ -41,6 +41,13 @@ export const MARKETPLACE_PLUGIN_OPTIONS = Symbol('MARKETPLACE_PLUGIN_OPTIONS');
                 label: [{ languageCode: LanguageCode.en, value: 'Is a Supplier?' }],
             },
             {
+                name: 'isStorefront',
+                type: 'boolean',
+                public: true,
+                defaultValue: false,
+                label: [{ languageCode: LanguageCode.en, value: 'Is a Seller?' }],
+            },
+            {
                 name: 'commissionRate',
                 type: 'float',
                 public: true,

@@ -1,5 +1,5 @@
-import { Permission } from '@vendure/core';
-
 export const CustomPermissions = {
-    ManageProductAssignments: 'ManageProductAssignments' as Permission,
+    ManageProductAssignments: 'ManageProductAssignments',
+    ChannelTypeSupplier: '_Channel Type: Supplier',
+    ChannelTypeStorefront: '_Channel Type: Storefront',
 };

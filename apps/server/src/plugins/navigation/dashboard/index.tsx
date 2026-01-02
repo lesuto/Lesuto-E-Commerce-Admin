@@ -18,7 +18,7 @@ defineDashboardExtension({
             title: 'Store',
             icon: ShoppingCartIcon,
             placement: 'top', // Platform area
-            order: 100, // After Customers (400), before Marketing (500)
+            order: 100 // After Customers (400), before Marketing (500)
         }
     ],
     routes: [
@@ -26,9 +26,10 @@ defineDashboardExtension({
             path: '/test',
             component: () => <div>Articles</div>,
             navMenuItem: {
-                sectionId: 'store',
+                sectionId: 'seller_store',
                 id: 'test',
                 title: 'test',
+                requiresPermission : '_ChannelTypeStorefront'
             },
         },
     ],
