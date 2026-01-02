@@ -1,0 +1,139 @@
+/* profile-page.css - Custom styles for Supplier Profile Page aligned with Vendure 3.5.2 theme */
+
+/* Use CSS variables from Vendure's shadcn-inspired theme */
+:root {
+  /* Fallbacks if not defined, based on default Vendure theme (blue primary) */
+  --primary: oklch(0.55 0.18 240); /* Primary brand color */
+  --primary-foreground: oklch(0.98 0.01 240); /* Text on primary */
+  --brand: #2563eb; /* Blue-600 */
+  --brand-lighter: #93c5fd; /* Blue-300 */
+  --foreground: hsl(0 0% 3.9%); /* Default text color */
+  --muted-foreground: hsl(0 0% 45.1%); /* Muted text */
+  --card: hsl(0 0% 100%); /* Card background */
+  --card-foreground: hsl(0 0% 3.9%); /* Card text */
+  --border: hsl(0 0% 89.8%); /* Border color */
+  --input: hsl(0 0% 100%); /* Input background */
+  --ring: hsl(0 0% 3.9%); /* Focus ring */
+  --radius: 0.5rem; /* Border radius */
+}
+
+/* Dark mode overrides (Vendure supports light/dark) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: oklch(0.65 0.16 240);
+    --primary-foreground: oklch(0.12 0.03 240);
+    --foreground: hsl(0 0% 98%);
+    --muted-foreground: hsl(0 0% 63.9%);
+    --card: hsl(0 0% 3.9%);
+    --card-foreground: hsl(0 0% 98%);
+    --border: hsl(0 0% 14.9%);
+    --input: hsl(0 0% 14.9%);
+    --ring: hsl(0 0% 83.1%);
+  }
+}
+
+/* Container and Card Styles */
+.supplier-profile-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.supplier-profile-card {
+  background-color: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  padding: 1.5rem;
+}
+
+/* Form Element Styles */
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--foreground);
+  background-color: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px rgba(var(--brand), 0.2);
+}
+
+.form-textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.form-checkbox {
+  height: 1rem;
+  width: 1rem;
+  color: var(--primary);
+  border-color: var(--border);
+  border-radius: 0.25rem;
+}
+
+.form-checkbox:focus {
+  box-shadow: 0 0 0 2px rgba(var(--brand), 0.2);
+}
+
+/* Button Styles */
+.save-button {
+  background-color: var(--brand);
+  color: var(--primary-foreground);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.save-button:hover {
+  background-color: var(--brand-darker, darken(var(--brand), 10%));
+}
+
+.save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Logo Preview Styles */
+.logo-preview {
+  height: 5rem;
+  width: 5rem;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+/* Status Messages */
+.uploading-message {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+
+/* Divider */
+.form-divider {
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}

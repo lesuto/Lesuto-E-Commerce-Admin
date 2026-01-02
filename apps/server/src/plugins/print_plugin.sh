@@ -16,4 +16,4 @@ print_directory_contents() {
 }
 
 # Usage: Replace with your directory path
-print_directory_contents "./marketplace"  # or '/marketplace' if absolute
+print_directory_contents "./supplier/account/profile"  # or '/marketplace' if absolute

@@ -13,9 +13,9 @@ export const channelTypeSupplierPermission = new PermissionDefinition({
   description: 'Set Channel Type For Suppliers',
 });
 
-export const channelTypeStorefrontPermission = new PermissionDefinition({
-  name: '_ChannelTypeStorefront',
-  description: 'Set Channel Type For Storefronts',
+export const channelTypeMerchantPermission = new PermissionDefinition({
+  name: '_ChannelTypeMerchant',
+  description: 'Set Channel Type For Merchants',
 });
 
 // GraphQL schema

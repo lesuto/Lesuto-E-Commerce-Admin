@@ -3,7 +3,7 @@ import { ProductChannelResolver } from './resolver';
 import {
     manageProductAssignmentsPermission,
     channelTypeSupplierPermission,
-    channelTypeStorefrontPermission,
+    channelTypeMerchantPermission,
     productChannelSchema
 } from './constants';
 
@@ -19,7 +19,7 @@ import {
     configuration: config => {
         config.authOptions.customPermissions.push(
             manageProductAssignmentsPermission,
-            channelTypeStorefrontPermission,
+            channelTypeMerchantPermission,
             channelTypeSupplierPermission
         );
         return config;

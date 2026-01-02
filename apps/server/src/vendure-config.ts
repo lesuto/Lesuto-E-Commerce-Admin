@@ -11,15 +11,18 @@ import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@ven
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
+
 import { ThemePlugin } from './plugins/theme/login/login-plugin';
 import { ProductChannelPlugin } from './plugins/custom-permissions';
 
-import { MarketplacePlugin } from './plugins/seller/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
+import { MarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
 
-import { SellerInventoryPlugin } from './plugins/seller/store/inventory/inventory.plugin';
-import { SellerProfilePlugin } from './plugins/seller/account/profile/profile.plugin';
-import { SellerBillingPlugin } from './plugins/seller/account/billing/billing.plugin';
+import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
+import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
+import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billing.plugin';
 
+import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
+import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
 import { SupplierOwnershipPlugin } from './plugins/supplier/ownership/ownership.plugin';
 
 import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
@@ -99,10 +102,12 @@ export const config: VendureConfig = {
                 : path.join(__dirname, 'dashboard'),
         }),
         ProductChannelPlugin,
-        SupplierOwnershipPlugin,
         MarketplacePlugin.init({}),
-        SellerInventoryPlugin.init({}),
-        SellerBillingPlugin.init({}),
-        SellerProfilePlugin.init({}),
+        MerchantInventoryPlugin.init({}),
+        MerchantBillingPlugin.init({}),
+        MerchantProfilePlugin.init({}),
+        SupplierBillingPlugin.init({}),
+        SupplierOwnershipPlugin,
+        SupplierProfilePlugin.init({}),
     ],
 };
