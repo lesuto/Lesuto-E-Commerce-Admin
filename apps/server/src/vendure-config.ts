@@ -7,19 +7,22 @@ import {
     LanguageCode,
     Permission
 } from '@vendure/core';
+
+//Permissions
+import { CustomPermissionsRoles } from './plugins/custom-permissions-roles';
+import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins'
+
+
 import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@vendure/email-plugin';
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
-
 import { ThemePlugin } from './plugins/theme/login/login-plugin';
-import { ProductChannelPlugin } from './plugins/custom-permissions';
-
-import { MarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
 
 import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
 import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
 import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billing.plugin';
+import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
 
 import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
 import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
@@ -29,7 +32,6 @@ import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
 
 import 'dotenv/config';
 import path from 'path';
-
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -101,13 +103,14 @@ export const config: VendureConfig = {
                 ? path.join(__dirname, '../dist/dashboard')
                 : path.join(__dirname, 'dashboard'),
         }),
-        ProductChannelPlugin,
-        MarketplacePlugin.init({}),
+        CustomPermissionsRoles,
+        CustomPermissionsChannelsPlugin.init({}),
+        MerchantMarketplacePlugin.init({}),
         MerchantInventoryPlugin.init({}),
         MerchantBillingPlugin.init({}),
         MerchantProfilePlugin.init({}),
+        SupplierProfilePlugin.init({}),
         SupplierBillingPlugin.init({}),
         SupplierOwnershipPlugin,
-        SupplierProfilePlugin.init({}),
     ],
 };

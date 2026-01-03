@@ -16,6 +16,43 @@ export default defineConfig({
             
             api: { host: 'auto', port: 'auto' },
             gqlOutputPath: './src/gql',
+
+            theme: {
+                light: {
+                    // Set primary to vibrant green from chameleon palette
+                    primary: "oklch(0.71 0.58 120)",
+                    "primary-foreground": "oklch(0.1 0.01 120)",
+                    
+                    // Brand colors based on chameleon green
+                    brand: "#6bff6b",
+                    "brand-lighter": "#b3ffb3", // Lighter green variant
+                    
+                    // Custom chameleon palette colors
+                    "chameleon-red": "#ff6b6b",
+                    "chameleon-yellow": "#ffd93d",
+                    "chameleon-green": "#6bff6b",
+                    "chameleon-cyan": "#6beeff",
+                    "chameleon-blue": "#6b8cff",
+                    "chameleon-magenta": "#d96bff",
+                },
+                dark: {
+                    // Muted primary for dark mode
+                    primary: "oklch(0.5 0.4 120)",
+                    "primary-foreground": "oklch(0.95 0.01 120)",
+                    
+                    // Same brand colors work for dark mode
+                    brand: "#6bff6b",
+                    "brand-lighter": "#b3ffb3",
+                    
+                    // Custom chameleon palette (same as light, or adjust if needed for contrast)
+                    "chameleon-red": "#ff6b6b",
+                    "chameleon-yellow": "#ffd93d",
+                    "chameleon-green": "#6bff6b",
+                    "chameleon-cyan": "#6beeff",
+                    "chameleon-blue": "#6b8cff",
+                    "chameleon-magenta": "#d96bff",
+                },
+            },
             
             // REMOVE 'extensions' array here. It causes the error.
         }),

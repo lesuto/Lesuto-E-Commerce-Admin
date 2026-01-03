@@ -9,6 +9,7 @@ import {
     Channel
 } from '@vendure/core';
 import { SupplierSubscription } from '../entities/supplier-subscription.entity';
+import { MarketplaceProfileView } from '../entities/marketplace-profile-view.entity';
 
 @Injectable()
 export class MarketplaceService {
@@ -17,14 +18,9 @@ export class MarketplaceService {
         private channelService: ChannelService,
     ) {}
 
-    /**
-     * Helper: Assigns a product and its variants to a target channel
-     */
     async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
-        // 1. Assign Product
         await this.channelService.assignToChannels(ctx, Product, productId, [targetChannelId]);
         
-        // 2. Assign Variants
         const product = await this.connection.getEntityOrThrow(ctx, Product, productId, {
             relations: ['variants']
         });
@@ -38,8 +34,7 @@ export class MarketplaceService {
 
     async subscribeToSupplier(ctx: RequestContext, supplierChannelId: ID) {
         const merchantChannelId = ctx.channelId;
-         
-        // 1. Create Subscription
+        
         const existing = await this.connection.getRepository(ctx, SupplierSubscription).findOne({
             where: {
                 merchantChannelId: merchantChannelId.toString(),
@@ -56,14 +51,12 @@ export class MarketplaceService {
             );
         }
 
-        // 2. Initial Sync: Get all existing Supplier products
         const supplierProducts = await this.connection.getRepository(ctx, Product)
             .createQueryBuilder('product')
             .leftJoin('product.channels', 'channel')
             .where('channel.id = :supplierId', { supplierId: supplierChannelId })
             .getMany();
-         
-        // 3. Assign them
+            
         for (const product of supplierProducts) {
             await this.assignProductToChannel(ctx, product.id, merchantChannelId);
         }
@@ -73,10 +66,19 @@ export class MarketplaceService {
 
     async getMarketplaceSuppliers(ctx: RequestContext) {
         // Find channels where isSupplier = true AND isMarketplaceApproved = true
-        // Use actual custom field column names from DB (prefixed with 'customFields' + PascalCase name)
         return this.connection.getRepository(ctx, Channel).createQueryBuilder('channel')
             .where('channel."customFieldsIssupplier" = :isSupplier', { isSupplier: true })
             .andWhere('channel."customFieldsIsmarketplaceapproved" = :approved', { approved: true })
             .getMany();
+    }
+
+    /**
+     * Helper to fetch the profile data using our View Entity
+     */
+    async getSupplierProfile(ctx: RequestContext, channelId: ID) {
+        return this.connection.getRepository(ctx, MarketplaceProfileView).findOne({
+            where: { channelId: channelId.toString() },
+            relations: ['logo']
+        });
     }
 }

@@ -1,29 +1,23 @@
 import React, { useState } from 'react';
-import { loadErrorMessages, loadDevMessages } from "@apollo/client/dev"; // Optional, can remove if not needed
-
-// Use Vendure's typed graphql
+import { loadErrorMessages, loadDevMessages } from "@apollo/client/dev"; 
 import { graphql } from '@/gql';
-
-// Import TanStack Query hook
 import { useQuery, useMutation } from '@tanstack/react-query';
-
-// Import Vendure API client
 import { api } from '@vendure/dashboard';
-
 import { Page, PageTitle, PageLayout, PageBlock } from '@vendure/dashboard';
 
-// Define queries with typed graphql
 const GET_MARKETPLACE_SUPPLIERS = graphql(`
     query GetMarketplaceSuppliers {
         marketplaceSuppliers {
             id
             code
-            customFields {
-                isSupplier
-                commissionRate
-                logoUrl
-                supplierDescription
-                isMarketplaceApproved
+            supplierProfile {
+                nameCompany
+                shortDescription
+                aboutCompany
+                commission
+                logo {
+                    preview
+                }
             }
         }
     }
@@ -41,22 +35,13 @@ export function MarketplaceComponent() {
         loadErrorMessages();
     }
 
-    // Use TanStack Query for fetching
     const { data, isLoading: loading, error, refetch } = useQuery({
         queryKey: ['marketplaceSuppliers'],
         queryFn: async () => {
-            try {
-                const result = await api.query(GET_MARKETPLACE_SUPPLIERS, {});
-                console.log('Query result:', result); // Log the fetched data
-                return result;
-            } catch (err) {
-                console.error('Query error:', err); // Log any fetch errors
-                throw err;
-            }
+            return await api.query(GET_MARKETPLACE_SUPPLIERS, {});
         },
     });
 
-    // Use TanStack Mutation for mutations
     const { mutate: subscribe } = useMutation({
         mutationFn: (variables: { id: string }) => api.mutate(SUBSCRIBE_TO_SUPPLIER, variables),
     });
@@ -65,7 +50,9 @@ export function MarketplaceComponent() {
     const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
 
     const suppliers = data?.marketplaceSuppliers || [];
-    console.log('Suppliers array:', suppliers); // Log the processed suppliers
+
+    // Helper to get name, defaulting to code if profile missing
+    const getSupplierName = (s: any) => s.supplierProfile?.nameCompany || s.code;
 
     const handleSubscribe = async (id: string, name: string) => {
         try {
@@ -82,7 +69,6 @@ export function MarketplaceComponent() {
 
     return (
         <Page pageId="marketplace">
-            {/* ✅ FIX: Use PageTitle here */}
             <PageTitle>Supplier Marketplace</PageTitle>
             
             <PageLayout>
@@ -111,8 +97,8 @@ export function MarketplaceComponent() {
                                         <div className="p-6">
                                             <div className="flex items-center space-x-4 mb-6">
                                                 <div className="w-20 h-20 rounded-2xl bg-gray-50 border border-gray-100 flex-shrink-0 overflow-hidden">
-                                                    {s.customFields.logoUrl ? (
-                                                        <img src={s.customFields.logoUrl} alt={s.code} className="w-full h-full object-cover" />
+                                                    {s.supplierProfile?.logo?.preview ? (
+                                                        <img src={s.supplierProfile.logo.preview} alt={s.code} className="w-full h-full object-cover" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-300 bg-gray-100">
                                                             {s.code.substring(0, 1).toUpperCase()}
@@ -120,20 +106,22 @@ export function MarketplaceComponent() {
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-xl font-bold text-gray-900">{s.code}</h3>
+                                                    <h3 className="text-xl font-bold text-gray-900">{getSupplierName(s)}</h3>
                                                     <div className="mt-1 flex items-center">
                                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                            {s.customFields.commissionRate}% Commission
+                                                            {s.supplierProfile?.commission || 0}% Commission
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
+                                            
                                             <div className="text-gray-600 text-sm mb-6 line-clamp-3 min-h-[4.5rem]">
-                                                {s.customFields.supplierDescription?.replace(/<[^>]+>/g, '') || "No description provided."}
+                                                {s.supplierProfile?.shortDescription || "No description provided."}
                                             </div>
+                                            
                                             <div className="flex flex-col space-y-3">
                                                 <button
-                                                    onClick={() => handleSubscribe(s.id, s.code)}
+                                                    onClick={() => handleSubscribe(s.id, getSupplierName(s))}
                                                     className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 active:scale-[0.98] transition-all"
                                                 >
                                                     Add Entire Catalog
@@ -155,22 +143,24 @@ export function MarketplaceComponent() {
                                     <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
                                         <div className="flex justify-between items-start mb-6">
                                             <div className="flex items-center space-x-4">
-                                                {selectedSupplier.customFields.logoUrl && 
-                                                    <img src={selectedSupplier.customFields.logoUrl} className="w-24 h-24 rounded-2xl object-cover border" />
+                                                {selectedSupplier.supplierProfile?.logo?.preview && 
+                                                    <img src={selectedSupplier.supplierProfile.logo.preview} className="w-24 h-24 rounded-2xl object-cover border" />
                                                 }
                                                 <div>
-                                                    <h2 className="text-3xl font-bold">{selectedSupplier.code}</h2>
-                                                    <p className="text-green-600 font-bold text-lg">{selectedSupplier.customFields.commissionRate}% Profit Share</p>
+                                                    <h2 className="text-3xl font-bold">{getSupplierName(selectedSupplier)}</h2>
+                                                    <p className="text-green-600 font-bold text-lg">{selectedSupplier.supplierProfile?.commission || 0}% Profit Share</p>
                                                 </div>
                                             </div>
                                             <button onClick={() => setSelectedSupplier(null)} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
                                         </div>
                                         <div className="prose max-w-none mb-8">
                                             <h4 className="text-gray-900 font-bold uppercase tracking-widest text-xs mb-2">About this Supplier</h4>
-                                            <div dangerouslySetInnerHTML={{ __html: selectedSupplier.customFields.supplierDescription || 'No details provided.' }} />
+                                            <div className="whitespace-pre-wrap">
+                                                {selectedSupplier.supplierProfile?.aboutCompany || selectedSupplier.supplierProfile?.shortDescription || 'No details provided.'}
+                                            </div>
                                         </div>
                                         <button
-                                            onClick={() => handleSubscribe(selectedSupplier.id, selectedSupplier.code)}
+                                            onClick={() => handleSubscribe(selectedSupplier.id, getSupplierName(selectedSupplier))}
                                             className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all"
                                         >
                                             Subscribe & Sync All Products

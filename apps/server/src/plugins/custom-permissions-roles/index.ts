@@ -25,4 +25,4 @@ import {
         return config;
     },
 })
-export class ProductChannelPlugin {}
+export class CustomPermissionsRoles {}
