@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router'; 
 import { loadErrorMessages, loadDevMessages } from "@apollo/client/dev"; 
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { api } from '@vendure/dashboard';
-import { Page, PageTitle, PageLayout, PageBlock } from '@vendure/dashboard';
+import { api, Page, PageTitle, PageLayout, PageBlock } from '@vendure/dashboard';
 
 const GET_MARKETPLACE_SUPPLIERS = graphql(`
     query GetMarketplaceSuppliers {
@@ -35,6 +35,8 @@ export function MarketplaceComponent() {
         loadErrorMessages();
     }
 
+    const navigate = useNavigate();
+
     const { data, isLoading: loading, error, refetch } = useQuery({
         queryKey: ['marketplaceSuppliers'],
         queryFn: async () => {
@@ -47,11 +49,9 @@ export function MarketplaceComponent() {
     });
 
     const [statusMessage, setStatusMessage] = useState<{ msg: string, type: 'info' | 'error' } | null>(null);
-    const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
 
     const suppliers = data?.marketplaceSuppliers || [];
 
-    // Helper to get name, defaulting to code if profile missing
     const getSupplierName = (s: any) => s.supplierProfile?.nameCompany || s.code;
 
     const handleSubscribe = async (id: string, name: string) => {
@@ -59,7 +59,6 @@ export function MarketplaceComponent() {
             setStatusMessage({ msg: `Linking ${name}'s catalog...`, type: 'info' });
             await subscribe({ id });
             setStatusMessage({ msg: `Success! ${name}'s products are syncing.`, type: 'info' });
-            setSelectedSupplier(null);
             refetch(); 
         } catch (e: any) {
             setStatusMessage({ msg: `Failed: ${e.message}`, type: 'error' });
@@ -72,12 +71,22 @@ export function MarketplaceComponent() {
             <PageTitle>Supplier Marketplace</PageTitle>
             
             <PageLayout>
+                {/* UPDATED LOADING STATE:
+                   Replaced simple text with a centered spinner container 
+                */}
                 {loading ? (
-                    <div className="p-8 text-center">Loading Marketplace...</div>
+                    <PageBlock column="main" blockId="loading-block">
+                        <div className="flex flex-col items-center justify-center min-h-[400px]">
+                            {/* Spinning circle */}
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                            {/* Pulsing text */}
+                            <p className="text-gray-500 font-medium animate-pulse">Loading Marketplace...</p>
+                        </div>
+                    </PageBlock>
                 ) : error ? (
                     <div className="p-8 text-red-600">Error: {error.message}</div>
                 ) : (
-                    <PageBlock column="main" blockId="marketplace-block">
+                    <PageBlock column="main" blockId="marketplace-list">
                         <div className="max-w-7xl mx-auto">
                             <div className="mb-8">
                                 <p className="text-lg text-gray-600">
@@ -126,58 +135,18 @@ export function MarketplaceComponent() {
                                                 >
                                                     Add Entire Catalog
                                                 </button>
+                                                
                                                 <button
-                                                    onClick={() => setSelectedSupplier(s)}
+                                                    onClick={() => navigate({ to: `/marketplace/supplier/${s.id}` })}
                                                     className="w-full bg-white text-gray-700 border border-gray-300 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-all"
                                                 >
-                                                    View Profile
+                                                    View Profile & Products
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-
-                            {selectedSupplier && (
-                                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-50 backdrop-blur-sm">
-                                    <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="flex items-center space-x-4">
-                                                {selectedSupplier.supplierProfile?.logo?.preview && 
-                                                    <img src={selectedSupplier.supplierProfile.logo.preview} className="w-24 h-24 rounded-2xl object-cover border" />
-                                                }
-                                                <div>
-                                                    <h2 className="text-3xl font-bold">{getSupplierName(selectedSupplier)}</h2>
-                                                    <p className="text-green-600 font-bold text-lg">{selectedSupplier.supplierProfile?.commission || 0}% Profit Share</p>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => setSelectedSupplier(null)} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
-                                        </div>
-                                        <div className="prose max-w-none mb-8">
-                                            <h4 className="text-gray-900 font-bold uppercase tracking-widest text-xs mb-2">About this Supplier</h4>
-                                            <div className="whitespace-pre-wrap">
-                                                {selectedSupplier.supplierProfile?.aboutCompany || selectedSupplier.supplierProfile?.shortDescription || 'No details provided.'}
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => handleSubscribe(selectedSupplier.id, getSupplierName(selectedSupplier))}
-                                            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all"
-                                        >
-                                            Subscribe & Sync All Products
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {suppliers.length === 0 && (
-                                <div className="mt-12 text-center p-12 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
-                                    <div className="text-5xl mb-4">🏪</div>
-                                    <h3 className="text-xl font-bold text-gray-900">No Suppliers Available</h3>
-                                    <p className="text-gray-500 max-w-xs mx-auto mt-2">
-                                        Approved suppliers will appear here.
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     </PageBlock>
                 )}

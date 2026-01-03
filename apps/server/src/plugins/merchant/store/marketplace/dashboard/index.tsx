@@ -1,6 +1,6 @@
 import { defineDashboardExtension } from '@vendure/dashboard';
 import { MarketplaceComponent } from './marketplace';
-import { ShoppingCartIcon } from 'lucide-react';
+import { SupplierDetailComponent } from './supplier-detail';
 
 export default defineDashboardExtension({
     routes: [
@@ -15,8 +15,20 @@ export default defineDashboardExtension({
             },
             component: MarketplaceComponent,
         },
+        // --- THE FIX ---
+        // Change ':id' to '*'
+        // This accepts /marketplace/supplier/1, /marketplace/supplier/999, etc.
+        {
+            path: '/marketplace/supplier/$id', 
+            loader: () => ({ 
+                breadcrumb: [
+                    { label: 'Marketplace', link: '/marketplace' },
+                    { label: 'Supplier Details', link: '' }
+                ] 
+            }),
+            component: SupplierDetailComponent,
+        },
     ],
-    // Placeholders
     pageBlocks: [], actionBarItems: [], alerts: [], widgets: [], 
     customFormComponents: {}, dataTables: [], detailForms: [], login: {}, historyEntries: [],
 });

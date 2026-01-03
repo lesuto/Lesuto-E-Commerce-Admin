@@ -3,7 +3,6 @@ import { Args, Mutation, Query, Resolver, ResolveField, Parent } from '@nestjs/g
 import { Permission } from '@vendure/common/lib/generated-types';
 import { MarketplaceService } from '../services/marketplace.service';
 
-// We resolve fields on the standard 'Channel' entity
 @Resolver('Channel')
 export class MarketplaceResolver {
     constructor(private marketplaceService: MarketplaceService) {}
@@ -14,11 +13,20 @@ export class MarketplaceResolver {
         return this.marketplaceService.getMarketplaceSuppliers(ctx);
     }
 
-    // The field name here 'supplierProfile' matches the schema above
+    @Query()
+    @Allow(Permission.ReadChannel)
+    async supplier(@Ctx() ctx: RequestContext, @Args('supplierChannelId') id: string) {
+        return this.marketplaceService.getSupplierChannel(ctx, id);
+    }
+
+    @Query()
+    @Allow(Permission.ReadChannel)
+    async supplierProducts(@Ctx() ctx: RequestContext, @Args('supplierChannelId') id: string) {
+        return this.marketplaceService.getSupplierProducts(ctx, id);
+    }
+
     @ResolveField()
     async supplierProfile(@Parent() channel: Channel, @Ctx() ctx: RequestContext) {
-        // This returns the Entity, which maps perfectly to our new GraphQL type
-        // because the property names (nameCompany, commission, logo) are identical.
         return this.marketplaceService.getSupplierProfile(ctx, channel.id);
     }
 
@@ -32,5 +40,11 @@ export class MarketplaceResolver {
     @Allow(Permission.UpdateProduct)
     async addMarketplaceProduct(@Ctx() ctx: RequestContext, @Args('productId') id: string) {
         return this.marketplaceService.assignProductToChannel(ctx, id, ctx.channelId);
+    }
+
+    @Mutation()
+    @Allow(Permission.UpdateProduct)
+    async removeMarketplaceProduct(@Ctx() ctx: RequestContext, @Args('productId') id: string) {
+        return this.marketplaceService.removeProductFromChannel(ctx, id, ctx.channelId);
     }
 }

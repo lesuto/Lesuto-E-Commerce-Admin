@@ -16,25 +16,29 @@ export class MarketplaceService {
     constructor(
         private connection: TransactionalConnection,
         private channelService: ChannelService,
-    ) {}
+    ) { }
 
     async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
         await this.channelService.assignToChannels(ctx, Product, productId, [targetChannelId]);
-        
-        const product = await this.connection.getEntityOrThrow(ctx, Product, productId, {
-            relations: ['variants']
-        });
-        
-        if (product.variants.length > 0) {
-            for (const variant of product.variants) {
-                await this.channelService.assignToChannels(ctx, ProductVariant, variant.id, [targetChannelId]);
-            }
+        const product = await this.connection.getEntityOrThrow(ctx, Product, productId, { relations: ['variants'] });
+        for (const variant of product.variants) {
+            await this.channelService.assignToChannels(ctx, ProductVariant, variant.id, [targetChannelId]);
         }
+        return true;
+    }
+
+    async removeProductFromChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
+        await this.channelService.removeFromChannels(ctx, Product, productId, [targetChannelId]);
+        const product = await this.connection.getEntityOrThrow(ctx, Product, productId, { relations: ['variants'] });
+        for (const variant of product.variants) {
+            await this.channelService.removeFromChannels(ctx, ProductVariant, variant.id, [targetChannelId]);
+        }
+        return true;
     }
 
     async subscribeToSupplier(ctx: RequestContext, supplierChannelId: ID) {
         const merchantChannelId = ctx.channelId;
-        
+
         const existing = await this.connection.getRepository(ctx, SupplierSubscription).findOne({
             where: {
                 merchantChannelId: merchantChannelId.toString(),
@@ -56,7 +60,7 @@ export class MarketplaceService {
             .leftJoin('product.channels', 'channel')
             .where('channel.id = :supplierId', { supplierId: supplierChannelId })
             .getMany();
-            
+
         for (const product of supplierProducts) {
             await this.assignProductToChannel(ctx, product.id, merchantChannelId);
         }
@@ -72,13 +76,27 @@ export class MarketplaceService {
             .getMany();
     }
 
-    /**
-     * Helper to fetch the profile data using our View Entity
-     */
+    async getSupplierChannel(ctx: RequestContext, id: ID) {
+        return this.connection.getRepository(ctx, Channel).findOne({
+            where: { id },
+            relations: ['customFields'] // Ensure we load custom fields if needed
+        });
+    }
+
     async getSupplierProfile(ctx: RequestContext, channelId: ID) {
         return this.connection.getRepository(ctx, MarketplaceProfileView).findOne({
             where: { channelId: channelId.toString() },
             relations: ['logo']
         });
+    }
+
+    // Updated to ensure we load channels to check state on frontend
+    async getSupplierProducts(ctx: RequestContext, supplierChannelId: ID) {
+        return this.connection.getRepository(ctx, Product).createQueryBuilder('product')
+            .leftJoinAndSelect('product.channels', 'channel')
+            .leftJoinAndSelect('product.featuredAsset', 'featuredAsset')
+            .leftJoinAndSelect('product.variants', 'variants')
+            .where('channel.id = :supplierId', { supplierId: supplierChannelId })
+            .getMany();
     }
 }
