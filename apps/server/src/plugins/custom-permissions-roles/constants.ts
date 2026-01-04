@@ -1,12 +1,6 @@
 import { PermissionDefinition } from '@vendure/core';
 import gql from 'graphql-tag';
 
-// Existing single permission
-export const manageProductAssignmentsPermission = new PermissionDefinition({
-  name: 'ManageProductAssignments',
-  description: 'Allows assigning/removing products to the active channel',
-});
-
 // Channel type permissions
 export const channelTypeSupplierPermission = new PermissionDefinition({
   name: '_ChannelTypeSupplier', // Internal unique key

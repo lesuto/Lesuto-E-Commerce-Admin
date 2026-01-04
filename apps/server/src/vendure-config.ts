@@ -37,6 +37,22 @@ const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
 
 export const config: VendureConfig = {
+    customFields: {
+        Product: [
+            {
+                name: 'basePrice',
+                type: 'int',
+                public: true,
+                nullable: true,
+                label: [{ languageCode: LanguageCode.en, value: 'Base Price (Commission)' }],
+                
+                // ADD THIS SECTION:
+                ui: { 
+                    component: 'currency-form-input', 
+                },
+            },
+        ],
+    },
     apiOptions: {
         port: serverPort,
         adminApiPath: 'admin-api',

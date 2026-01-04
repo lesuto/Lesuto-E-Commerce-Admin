@@ -25,7 +25,7 @@ export interface CustomPermissionsChannelPluginOptions {}
                 type: 'boolean',
                 public: true,
                 defaultValue: false,
-                label: [{ languageCode: LanguageCode.en, value: 'Approved for CustomPermissionsChannels' }],
+                label: [{ languageCode: LanguageCode.en, value: 'Approved for Marketplace' }],
             },
             {
                 name: 'isLesutoManaged',

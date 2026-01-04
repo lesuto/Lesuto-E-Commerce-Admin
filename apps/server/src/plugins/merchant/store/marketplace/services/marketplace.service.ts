@@ -91,12 +91,14 @@ export class MarketplaceService {
     }
 
     // Updated to ensure we load channels to check state on frontend
-    async getSupplierProducts(ctx: RequestContext, supplierChannelId: ID) {
-        return this.connection.getRepository(ctx, Product).createQueryBuilder('product')
-            .leftJoinAndSelect('product.channels', 'channel')
-            .leftJoinAndSelect('product.featuredAsset', 'featuredAsset')
-            .leftJoinAndSelect('product.variants', 'variants')
-            .where('channel.id = :supplierId', { supplierId: supplierChannelId })
-            .getMany();
-    }
+async getSupplierProducts(ctx: RequestContext, supplierChannelId: ID) {
+    return this.connection.getRepository(ctx, Product)
+        .createQueryBuilder('product')
+        .leftJoinAndSelect('product.channels', 'channel')
+        .leftJoinAndSelect('product.featuredAsset', 'featuredAsset')
+        .leftJoinAndSelect('product.variants', 'variants')
+        .where('channel.id = :supplierId', { supplierId: supplierChannelId })
+        .andWhere('product."deletedAt" IS NULL') // exclude deleted
+        .getMany();
+}
 }

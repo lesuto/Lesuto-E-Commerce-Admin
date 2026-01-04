@@ -1,15 +1,21 @@
 import { PluginCommonModule, Type, VendurePlugin } from '@vendure/core';
 import { MERCHANT_INVENTORY_PLUGIN_OPTIONS } from './constants';
 import { PluginInitOptions } from './types';
+import { manageProductAssignmentsPermission } from './api/permissions'; // Import this
+import { MerchantInventoryResolver, shopApiExtensions } from './api/api'; // Import this
 
 @VendurePlugin({
     imports: [PluginCommonModule],
-    providers: [{ provide: MERCHANT_INVENTORY_PLUGIN_OPTIONS, useFactory: () => MerchantInventoryPlugin.options }],
+    providers: [
+        { provide: MERCHANT_INVENTORY_PLUGIN_OPTIONS, useFactory: () => MerchantInventoryPlugin.options }
+    ],
+    adminApiExtensions: {
+        schema: shopApiExtensions,
+        resolvers: [MerchantInventoryResolver],
+    },
     configuration: config => {
-        // Plugin-specific configuration
-        // such as custom fields, custom permissions,
-        // strategies etc. can be configured here by
-        // modifying the `config` object.
+        // Register the custom permission
+        config.authOptions.customPermissions.push(manageProductAssignmentsPermission);
         return config;
     },
     compatibility: '^3.0.0',

@@ -1,12 +1,11 @@
 import { defineDashboardExtension } from '@vendure/dashboard';
-import { MerchantInventory } from './inventory';
-import { ShoppingCartIcon } from 'lucide-react';
+import { InventoryComponent } from './inventory';
 
 export default defineDashboardExtension({
     routes: [
         {
-            path: '/Inventory',
-            component: MerchantInventory,
+            path: '/inventory',
+            component: InventoryComponent,
             navMenuItem: {
                 sectionId: 'merchant_store',
                 id: 'inventory',
