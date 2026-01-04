@@ -4,13 +4,15 @@ import {
     Ctx, 
     RequestContext, 
     ID, 
-    ProductService, 
-    Transaction 
+    Transaction,
+    Permission,
+    TransactionalConnection,
+    Product,
+    ProductEvent,
+    EventBus
 } from '@vendure/core';
-import { manageProductAssignmentsPermission } from './permissions';
 import gql from 'graphql-tag';
 
-// Define the Schema Extension
 export const shopApiExtensions = gql`
     extend type Mutation {
         removeProductFromMyChannel(productId: ID!): Boolean!
@@ -19,23 +21,40 @@ export const shopApiExtensions = gql`
 
 @Resolver()
 export class MerchantInventoryResolver {
-    constructor(private productService: ProductService) {}
+    constructor(
+        private connection: TransactionalConnection,
+        private eventBus: EventBus
+    ) {}
 
     @Transaction()
     @Mutation()
-    @Allow(manageProductAssignmentsPermission.Permission)
+    // STRICT SECURITY: Only allow users with this specific permission
+    @Allow('ManageProductAssignments' as Permission) 
     async removeProductFromMyChannel(
-        @Ctx() ctx: RequestContext, // @Ctx() is the decorator, RequestContext is the type
+        @Ctx() ctx: RequestContext,
         @Args('productId') productId: ID,
     ): Promise<boolean> {
-        const product = await this.productService.findOne(ctx, productId);
+        
+        // 1. Check if the product exists at all
+        const product = await this.connection.getRepository(ctx, Product).findOne({
+            where: { id: productId }
+        });
+
         if (!product) throw new Error('Product not found');
 
-        // Remove from current channel
-        await this.productService.removeProductsFromChannel(ctx, {
-            productIds: [product.id],
-            channelId: ctx.channelId,
-        });
+        // 2. SAFE UNASSIGNMENT
+        // This command removes the row from the 'product_channels' table ONLY.
+        // It does NOT delete the product from the 'product' table.
+        await this.connection
+            .getRepository(ctx, Product)
+            .createQueryBuilder()
+            .relation(Product, 'channels')
+            .of(product)
+            .remove(ctx.channelId); // Removes ONLY the current channel's link
+
+        // 3. Notify the system (Search Index, etc.) that this product changed
+        // This ensures it disappears from your storefront immediately.
+        this.eventBus.publish(new ProductEvent(ctx, product, 'updated'));
 
         return true;
     }

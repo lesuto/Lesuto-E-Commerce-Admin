@@ -19,10 +19,11 @@ import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
 import { ThemePlugin } from './plugins/theme/login/login-plugin';
 
-import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
-import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
 import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billing.plugin';
-import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; // Needs To Be Split Up Remove Supplier Functionality For Another Plugin (Profile)
+import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
+
+import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
+import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; 
 
 import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
 import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
