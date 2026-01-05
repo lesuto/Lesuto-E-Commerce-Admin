@@ -24,7 +24,7 @@ import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billin
 import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
 
 import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
-import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin'; 
+import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin';
 
 import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
 import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
@@ -34,6 +34,8 @@ import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
 
 import 'dotenv/config';
 import path from 'path';
+import { GlobalLoadingScreenPlugin } from './plugins/global-loading-screen/global-loading-screen.plugin';
+import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -53,10 +55,10 @@ export const config: VendureConfig = {
                 public: true,
                 nullable: true,
                 label: [{ languageCode: LanguageCode.en, value: 'Base Price (Commission)' }],
-                
+
                 // ADD THIS SECTION:
-                ui: { 
-                    component: 'currency-form-input', 
+                ui: {
+                    component: 'currency-form-input',
                 },
             },
         ],
@@ -82,16 +84,30 @@ export const config: VendureConfig = {
         },
         requireVerification: false
     },
+    // dbConnectionOptions: {
+    //     type: 'postgres',
+    //     url: process.env.DATABASE_URL,
+    //     ssl: {
+    //         rejectUnauthorized: false,
+    //     },
+    //     synchronize: false,
+    //     migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
+    //     logging: ['query', 'error'],
+    //     schema: process.env.DB_SCHEMA || 'public',
+    // },
     dbConnectionOptions: {
         type: 'postgres',
-        url: process.env.DATABASE_URL,
-        ssl: {
-            rejectUnauthorized: false,
-        },
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 6543,
+        username: process.env.DB_USERNAME || 'vendure',
+        password: process.env.DB_PASSWORD || '-m3ZXEdR3UWKQygHpUw5xw',
+        database: process.env.DB_NAME || 'vendure',
+        schema: process.env.DB_SCHEMA || 'public',
         synchronize: false,
         migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
         logging: ['query', 'error'],
-        schema: process.env.DB_SCHEMA || 'public',
+        // Local Postgres usually doesn’t need SSL
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     },
     paymentOptions: {
         paymentMethodHandlers: [dummyPaymentHandler],
@@ -136,5 +152,7 @@ export const config: VendureConfig = {
         SupplierProfilePlugin.init({}),
         SupplierBillingPlugin.init({}),
         SupplierOwnershipPlugin,
+        GlobalLoadingScreenPlugin.init({}),
+        GlobalFacetConfigurationPlugin.init({}),
     ],
 };
