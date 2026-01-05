@@ -1,7 +1,4 @@
-/**
- * @description
- * The plugin can be configured using the following options:
- */
 export interface PluginInitOptions {
-    exampleOption?: string;
+    // Add specific options here if needed in the future
+    enabled?: boolean;
 }

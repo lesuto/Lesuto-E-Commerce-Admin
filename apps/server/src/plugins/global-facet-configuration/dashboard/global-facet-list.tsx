@@ -402,18 +402,18 @@ export const GlobalFacetList = () => {
                                                     >
                                                         <Edit2 className="w-4 h-4" />
                                                     </button>
-<button 
-    className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
-    onClick={(e) => {
-        e.stopPropagation();
-        if(confirm(`Delete "${facet.name}" and all its values?`)) {
-            deleteFacetMutation.mutate(facet.id);
-        }
-    }}
-    title="Delete"
->
-    <Trash2 className="w-4 h-4" />
-</button>
+                                                    <button
+                                                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (confirm(`Delete "${facet.name}" and all its values?`)) {
+                                                                deleteFacetMutation.mutate(facet.id);
+                                                            }
+                                                        }}
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}

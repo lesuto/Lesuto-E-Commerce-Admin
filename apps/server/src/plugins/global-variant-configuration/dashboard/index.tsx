@@ -1,18 +1,17 @@
 import { defineDashboardExtension } from '@vendure/dashboard';
-// FIX 3: Import from lowercase filename
-import { GlobalFacetList } from './global-facet-list'; 
+import { GlobalVariantSync } from './global-variant-sync';
 
-defineDashboardExtension({
+export default defineDashboardExtension({
     routes: [
         {
-            path: '/settings/global-facets',
-            loader: () => ({ breadcrumb: 'Global Facets' }),
+            path: '/settings/global-variant-sync',
+            loader: () => ({ breadcrumb: 'Global Variant Sync' }),
             navMenuItem: {
-                id: 'global-facets',
-                title: 'Global Facets',
+                id: 'global-variant-sync',
+                title: 'Global Variant Sync',
                 sectionId: 'settings', 
             },
-            component: GlobalFacetList,
+            component: GlobalVariantSync,
         },
     ],
     pageBlocks: [],

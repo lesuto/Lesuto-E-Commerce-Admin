@@ -4,7 +4,7 @@ import { GLOBAL_FACET_CONFIGURATION_PLUGIN_OPTIONS } from './constants';
 import { PluginInitOptions } from './types';
 import { GlobalFacetService } from './services/global-facet.service';
 import { adminApiExtensions } from './api/api-extensions';
-import { GlobalFacetResolver } from './services/global-facet.resolver';
+import { GlobalFacetResolver } from './api/global-facet.resolver';
 
 @VendurePlugin({
     imports: [PluginCommonModule],
