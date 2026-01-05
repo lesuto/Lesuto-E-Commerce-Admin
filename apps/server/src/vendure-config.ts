@@ -36,6 +36,7 @@ import 'dotenv/config';
 import path from 'path';
 import { GlobalLoadingScreenPlugin } from './plugins/global-loading-screen/global-loading-screen.plugin';
 import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
+import { GlobalVariantConfigurationPlugin } from './plugins/global-variant-configuration/global-variant-configuration.plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -154,5 +155,6 @@ export const config: VendureConfig = {
         SupplierOwnershipPlugin,
         GlobalLoadingScreenPlugin.init({}),
         GlobalFacetConfigurationPlugin.init({}),
+        GlobalVariantConfigurationPlugin.init({}),
     ],
 };
