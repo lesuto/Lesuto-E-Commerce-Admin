@@ -9,7 +9,9 @@ import {
     AlertCircle,
     ArrowLeft,
     Layers,
-    Tag
+    Tag,
+    Edit2,
+    X
 } from 'lucide-react';
 
 // --- GraphQL Definitions ---
@@ -48,6 +50,16 @@ const CreateFacetDocument = graphql(`
     }
 `);
 
+const UpdateFacetDocument = graphql(`
+    mutation UpdateGlobalFacet($input: UpdateFacetInput!) {
+        updateFacet(input: $input) {
+            id
+            name
+            code
+        }
+    }
+`);
+
 const DeleteFacetDocument = graphql(`
     mutation DeleteGlobalFacet($id: ID!) {
         deleteFacet(id: $id) {
@@ -56,12 +68,21 @@ const DeleteFacetDocument = graphql(`
     }
 `);
 
-// New Mutations for Sub-Facets (Values)
 const CreateFacetValueDocument = graphql(`
     mutation CreateGlobalFacetValue($input: [CreateFacetValueInput!]!) {
         createFacetValues(input: $input) {
             id
             name
+        }
+    }
+`);
+
+const UpdateFacetValueDocument = graphql(`
+    mutation UpdateGlobalFacetValue($input: [UpdateFacetValueInput!]!) {
+        updateFacetValues(input: $input) {
+            id
+            name
+            code
         }
     }
 `);
@@ -80,6 +101,9 @@ export const GlobalFacetList = () => {
     
     // UI State
     const [selectedFacet, setSelectedFacet] = useState<any | null>(null);
+    
+    // Form State
+    const [editingId, setEditingId] = useState<string | null>(null); // If set, we are in Edit Mode
     const [newName, setNewName] = useState('');
     const [newCode, setNewCode] = useState('');
 
@@ -90,13 +114,18 @@ export const GlobalFacetList = () => {
     });
 
     // --- Mutations ---
+
+    // 1. Facets
     const createFacetMutation = useMutation({
         mutationFn: (variables: { input: any }) => api.query(CreateFacetDocument, variables),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['global-facets'] });
-            setNewName(''); setNewCode('');
-        },
+        onSuccess: () => resetForm(),
         onError: () => alert('Failed to create facet.')
+    });
+
+    const updateFacetMutation = useMutation({
+        mutationFn: (variables: { input: any }) => api.query(UpdateFacetDocument, variables),
+        onSuccess: () => resetForm(),
+        onError: () => alert('Failed to update facet.')
     });
 
     const deleteFacetMutation = useMutation({
@@ -104,87 +133,128 @@ export const GlobalFacetList = () => {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['global-facets'] })
     });
 
+    // 2. Facet Values
     const createValueMutation = useMutation({
         mutationFn: (variables: { input: any[] }) => api.query(CreateFacetValueDocument, variables),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['global-facets'] });
-            // Update local selection to reflect new data
-            if(selectedFacet && data?.facets?.items) {
-                const updated = data.facets.items.find(f => f.id === selectedFacet.id);
-                if(updated) setSelectedFacet(updated);
-            }
-            setNewName(''); setNewCode('');
-        },
+        onSuccess: () => resetForm(true),
         onError: () => alert('Failed to create value.')
     });
 
+    const updateValueMutation = useMutation({
+        mutationFn: (variables: { input: any[] }) => api.query(UpdateFacetValueDocument, variables),
+        onSuccess: () => resetForm(true),
+        onError: () => alert('Failed to update value.')
+    });
+
     const deleteValueMutation = useMutation({
-        // FIX: Pass the ID inside an array: { ids: [id] }
-        mutationFn: (id: string) => api.query(DeleteFacetValueDocument, { ids: [id] }),
-        onSuccess: () => {
-             // Invalidate to refresh the list immediately
-            queryClient.invalidateQueries({ queryKey: ['global-facets'] });
+        mutationFn: async (id: string) => {
+            const res = await api.query(DeleteFacetValueDocument, { ids: [id] });
+            return res.deleteFacetValues;
+        },
+        onSuccess: (results) => {
+            const failed = results.find((r: any) => r.result === 'NOT_DELETED');
+            if (failed) {
+                alert(`Cannot delete: ${failed.message}`);
+            } else {
+                queryClient.invalidateQueries({ queryKey: ['global-facets'] });
+            }
         },
         onError: (err) => {
-            console.error('Failed to delete value', err);
-            alert('Failed to delete value.');
+            console.error(err);
+            alert('System error during deletion.');
         }
     });
-    
-    // --- Loading & Auth ---
-    if (isLoading) return <div className="p-8">Loading...</div>;
 
-    const roles = data?.activeAdministrator?.user?.roles || [];
-    const allPermissions = roles.flatMap(r => r.permissions);
-    const isAdmin = allPermissions.includes('SuperAdmin');
+    // --- Helpers ---
 
-    if (!isAdmin) {
-        return (
-            <Page pageId="global-facets-denied">
-                <PageLayout>
-                    <PageBlock blockId="denied" column="main">
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-                            <AlertCircle className="w-12 h-12 mb-4 text-red-500" />
-                            <h2 className="text-lg font-semibold">Access Denied</h2>
-                            <p>Only Super Admins can manage Global Facets.</p>
-                        </div>
-                    </PageBlock>
-                </PageLayout>
-            </Page>
-        );
-    }
+    const resetForm = (refreshList = true) => {
+        if(refreshList) queryClient.invalidateQueries({ queryKey: ['global-facets'] });
+        
+        // If we were editing a value, re-sync the selected facet
+        if (selectedFacet && data?.facets?.items) {
+            const updated = data.facets.items.find((f: any) => f.id === selectedFacet.id);
+            if(updated) setSelectedFacet(updated);
+        }
 
-    // --- Helper Logic ---
+        setEditingId(null);
+        setNewName('');
+        setNewCode('');
+    };
 
-    // Keep selected facet sync'd with real data
+    const startEditing = (item: any) => {
+        setEditingId(item.id);
+        setNewName(item.name);
+        setNewCode(item.code);
+    };
+
     const activeFacet = selectedFacet 
         ? data?.facets?.items.find((f: any) => f.id === selectedFacet.id) 
         : null;
 
-    const handleCreateFacet = () => {
+    // --- Handlers: Facets ---
+
+    const handleSaveFacet = () => {
         if (!newName || !newCode) return;
-        createFacetMutation.mutate({
-            input: {
-                code: newCode,
-                isPrivate: false,
-                translations: [{ languageCode: 'en', name: newName }]
-            }
-        });
+
+        if (editingId) {
+            // Update Existing
+            updateFacetMutation.mutate({
+                input: {
+                    id: editingId,
+                    code: newCode,
+                    translations: [{ languageCode: 'en', name: newName }]
+                }
+            });
+        } else {
+            // Create New
+            createFacetMutation.mutate({
+                input: {
+                    code: newCode,
+                    isPrivate: false,
+                    translations: [{ languageCode: 'en', name: newName }]
+                }
+            });
+        }
     };
 
-    const handleCreateValue = () => {
+    // --- Handlers: Values ---
+
+    const handleSaveValue = () => {
         if (!newName || !newCode || !activeFacet) return;
-        createValueMutation.mutate({
-            input: [{
-                facetId: activeFacet.id,
-                code: newCode,
-                translations: [{ languageCode: 'en', name: newName }]
-            }]
-        });
+
+        if (editingId) {
+            // Update Existing
+            updateValueMutation.mutate({
+                input: [{
+                    id: editingId,
+                    code: newCode,
+                    translations: [{ languageCode: 'en', name: newName }]
+                }]
+            });
+        } else {
+            // Create New
+            createValueMutation.mutate({
+                input: [{
+                    facetId: activeFacet.id,
+                    code: newCode,
+                    translations: [{ languageCode: 'en', name: newName }]
+                }]
+            });
+        }
     };
+
+
+    // --- Loading & Auth ---
+    if (isLoading) return <div className="p-8">Loading...</div>;
+
+    const roles = data?.activeAdministrator?.user?.roles || [];
+    const allPermissions = roles.flatMap((r: any) => r.permissions);
+    const isAdmin = allPermissions.includes('SuperAdmin');
+
+    if (!isAdmin) return <div className="p-8 text-red-500">Access Denied</div>;
+
 
     // --- RENDER ---
-
     return (
         <Page pageId="global-facets">
             <PageTitle>Global Facets Configuration</PageTitle>
@@ -200,14 +270,16 @@ export const GlobalFacetList = () => {
                                 <div>
                                     <h3 className="font-medium">Global Sync Active</h3>
                                     <p className="text-sm opacity-80">
-                                        Facets and values created here are synced to all merchants.
+                                        Facets created here are synced to all merchants.
                                     </p>
                                 </div>
                             </div>
 
-                            {/* Create Facet Form */}
-                            <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
-                                <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider text-gray-500 dark:text-gray-400">Create New Facet Group</h3>
+                            {/* Form (Create or Edit) */}
+                            <div className={`p-4 border rounded-lg shadow-sm transition-colors ${editingId ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800' : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'}`}>
+                                <h3 className={`text-sm font-semibold mb-3 uppercase tracking-wider ${editingId ? 'text-amber-600 dark:text-amber-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {editingId ? 'Edit Facet' : 'Create New Facet Group'}
+                                </h3>
                                 <div className="flex gap-4 items-end">
                                     <div className="flex-1">
                                         <label className="block text-sm font-medium mb-1 dark:text-gray-300">Name</label>
@@ -227,13 +299,24 @@ export const GlobalFacetList = () => {
                                             placeholder="e.g. material"
                                         />
                                     </div>
+                                    
+                                    {editingId && (
+                                        <button 
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-gray-200 rounded-md hover:bg-gray-300 flex items-center gap-2"
+                                            onClick={() => resetForm(false)}
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Cancel
+                                        </button>
+                                    )}
+
                                     <button 
-                                        className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark disabled:opacity-50 flex items-center gap-2"
-                                        onClick={handleCreateFacet}
-                                        disabled={!newName || !newCode || createFacetMutation.isPending}
+                                        className={`px-4 py-2 text-white rounded-md flex items-center gap-2 ${editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary hover:bg-primary-dark'}`}
+                                        onClick={handleSaveFacet}
+                                        disabled={!newName || !newCode || createFacetMutation.isPending || updateFacetMutation.isPending}
                                     >
-                                        <Plus className="w-4 h-4" />
-                                        Create
+                                        {editingId ? <Edit2 className="w-4 h-4"/> : <Plus className="w-4 h-4" />}
+                                        {editingId ? 'Update' : 'Create'}
                                     </button>
                                 </div>
                             </div>
@@ -252,7 +335,7 @@ export const GlobalFacetList = () => {
                                     <tbody className="divide-y divide-gray-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
                                         {data?.facets?.items.map((facet: any) => (
                                             <tr key={facet.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50 cursor-pointer" onClick={() => {
-                                                setNewName(''); setNewCode(''); // clear form
+                                                resetForm(false);
                                                 setSelectedFacet(facet);
                                             }}>
                                                 <td className="px-4 py-3 font-medium dark:text-gray-200">{facet.name}</td>
@@ -260,13 +343,24 @@ export const GlobalFacetList = () => {
                                                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                                                     {facet.values?.length || 0} items
                                                 </td>
-                                                <td className="px-4 py-3 text-right">
+                                                <td className="px-4 py-3 text-right flex justify-end gap-2">
+                                                    <button 
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            startEditing(facet);
+                                                        }}
+                                                        title="Edit"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
                                                     <button 
                                                         className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             if(confirm('Delete entire facet group?')) deleteFacetMutation.mutate(facet.id);
                                                         }}
+                                                        title="Delete"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -279,14 +373,13 @@ export const GlobalFacetList = () => {
                         </div>
                     )}
 
-                    {/* View 2: Facet Values (Sub-facets) */}
+                    {/* View 2: Facet Values */}
                     {activeFacet && (
                         <div className="flex flex-col gap-6">
-                            {/* Header */}
                             <div className="flex items-center gap-4 border-b border-gray-200 dark:border-zinc-800 pb-4">
                                 <button 
                                     onClick={() => {
-                                        setNewName(''); setNewCode('');
+                                        resetForm(false);
                                         setSelectedFacet(null);
                                     }}
                                     className="p-2 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full"
@@ -302,9 +395,11 @@ export const GlobalFacetList = () => {
                                 </div>
                             </div>
 
-                             {/* Create Value Form */}
-                             <div className="p-4 border rounded-lg shadow-sm bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800">
-                                <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider text-gray-500 dark:text-gray-400">Add New Value</h3>
+                             {/* Form (Create/Edit Value) */}
+                             <div className={`p-4 border rounded-lg shadow-sm transition-colors ${editingId ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800' : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'}`}>
+                                <h3 className={`text-sm font-semibold mb-3 uppercase tracking-wider ${editingId ? 'text-amber-600 dark:text-amber-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {editingId ? 'Edit Value' : 'Add New Value'}
+                                </h3>
                                 <div className="flex gap-4 items-end">
                                     <div className="flex-1">
                                         <label className="block text-sm font-medium mb-1 dark:text-gray-300">Value Name</label>
@@ -324,18 +419,28 @@ export const GlobalFacetList = () => {
                                             placeholder={`e.g. cotton`}
                                         />
                                     </div>
+
+                                    {editingId && (
+                                        <button 
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 dark:bg-zinc-700 dark:text-gray-200 rounded-md hover:bg-gray-300 flex items-center gap-2"
+                                            onClick={() => resetForm(false)}
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Cancel
+                                        </button>
+                                    )}
+
                                     <button 
-                                        className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark disabled:opacity-50 flex items-center gap-2"
-                                        onClick={handleCreateValue}
-                                        disabled={!newName || !newCode || createValueMutation.isPending}
+                                        className={`px-4 py-2 text-white rounded-md flex items-center gap-2 ${editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary hover:bg-primary-dark'}`}
+                                        onClick={handleSaveValue}
+                                        disabled={!newName || !newCode || createValueMutation.isPending || updateValueMutation.isPending}
                                     >
-                                        <Plus className="w-4 h-4" />
-                                        Add Value
+                                        {editingId ? <Edit2 className="w-4 h-4"/> : <Plus className="w-4 h-4" />}
+                                        {editingId ? 'Update' : 'Add'}
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Values List */}
                             <div className="border rounded-lg overflow-hidden border-gray-200 dark:border-zinc-800">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800">
@@ -353,31 +458,31 @@ export const GlobalFacetList = () => {
                                                     {val.name}
                                                 </td>
                                                 <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{val.code}</td>
-                                                <td className="px-4 py-3 text-right">
+                                                <td className="px-4 py-3 text-right flex justify-end gap-2">
+                                                    <button 
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                                                        onClick={() => startEditing(val)}
+                                                        title="Edit"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
                                                     <button 
                                                         className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
                                                         onClick={() => {
                                                             if(confirm('Delete this value?')) deleteValueMutation.mutate(val.id);
                                                         }}
+                                                        title="Delete"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </td>
                                             </tr>
                                         ))}
-                                        {(!activeFacet.values || activeFacet.values.length === 0) && (
-                                            <tr>
-                                                <td colSpan={3} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                    No values yet. Add one above.
-                                                </td>
-                                            </tr>
-                                        )}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
                     )}
-
                 </PageBlock>
             </PageLayout>
         </Page>
