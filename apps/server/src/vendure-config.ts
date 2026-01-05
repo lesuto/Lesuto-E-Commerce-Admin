@@ -5,7 +5,8 @@ import {
     DefaultSearchPlugin,
     VendureConfig,
     LanguageCode,
-    Permission
+    Permission,
+    DefaultProductVariantPriceUpdateStrategy
 } from '@vendure/core';
 
 //Permissions
@@ -38,6 +39,12 @@ const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
 
 export const config: VendureConfig = {
+    //Sync Catalog Prices Across All
+    catalogOptions: {
+        productVariantPriceUpdateStrategy: new DefaultProductVariantPriceUpdateStrategy({
+            syncPricesAcrossChannels: true,
+        }),
+    },
     customFields: {
         Product: [
             {

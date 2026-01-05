@@ -5,7 +5,7 @@ import { MarketplaceService } from '../services/marketplace.service';
 
 @Resolver('Channel')
 export class MarketplaceResolver {
-    constructor(private marketplaceService: MarketplaceService) {}
+    constructor(private marketplaceService: MarketplaceService) { }
 
     @Query()
     @Allow(Permission.ReadChannel)
@@ -35,9 +35,9 @@ export class MarketplaceResolver {
     async subscribeToSupplier(@Ctx() ctx: RequestContext, @Args('supplierChannelId') id: string) {
         return this.marketplaceService.subscribeToSupplier(ctx, id);
     }
-    
+
     @Mutation()
-    @Allow(Permission.UpdateProduct)
+    @Allow(Permission.Authenticated)
     async addMarketplaceProduct(@Ctx() ctx: RequestContext, @Args('productId') id: string) {
         return this.marketplaceService.assignProductToChannel(ctx, id, ctx.channelId);
     }

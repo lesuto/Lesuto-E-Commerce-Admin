@@ -18,12 +18,12 @@ export const marketplaceSchema = gql`
     extend type Mutation {
         subscribeToSupplier(supplierChannelId: ID!): Boolean!
         addMarketplaceProduct(productId: ID!): Boolean!
-        removeMarketplaceProduct(productId: ID!): Boolean! # Added this
+        removeMarketplaceProduct(productId: ID!): Boolean! 
     }
     
     extend type Query {
         marketplaceSuppliers: [Channel!]!
         supplierProducts(supplierChannelId: ID!): [Product!]!
-        supplier(supplierChannelId: ID!): Channel # Added single fetch
+        supplier(supplierChannelId: ID!): Channel
     }
 `;
