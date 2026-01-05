@@ -16,4 +16,4 @@ import {
         return config;
     },
 })
-export class CustomPermissionsRoles {}
+export class CustomPermissionsRolesPlugin {}

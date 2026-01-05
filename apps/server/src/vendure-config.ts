@@ -10,7 +10,7 @@ import {
 } from '@vendure/core';
 
 //Permissions
-import { CustomPermissionsRoles } from './plugins/custom-permissions-roles';
+import { CustomPermissionsRolesPlugin } from './plugins/custom-permissions-roles';
 import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins'
 
 
@@ -144,7 +144,7 @@ export const config: VendureConfig = {
                 ? path.join(__dirname, '../dist/dashboard')
                 : path.join(__dirname, 'dashboard'),
         }),
-        CustomPermissionsRoles,
+        CustomPermissionsRolesPlugin,
         CustomPermissionsChannelsPlugin.init({}),
         MerchantMarketplacePlugin.init({}),
         MerchantInventoryPlugin.init({}),
