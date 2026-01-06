@@ -23,42 +23,30 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
         this.eventBus.ofType(ProductVariantEvent)
             .pipe(filter(event => event.type === 'created' || event.type === 'updated'))
             .subscribe(async (event) => {
-                // Smart Poll for Price/Stock availability to ensure transaction committed
                 const entities = Array.isArray(event.entity) ? event.entity : [event.entity];
                 const ids = entities.map(v => v.id);
-                let attempts = 0;
-                let ready = false;
+                
+                // Allow DB to settle
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-                while (attempts < 10 && !ready) {
-                    const check = await this.connection.getRepository(event.ctx, ProductVariantPrice).findOne({
-                        where: { variant: { id: ids[0] }, channelId: event.ctx.channelId }
-                    });
-                    if (check) ready = true;
-                    else {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                        attempts++;
-                    }
-                }
-
-                // FIX: Added 'product.channels' to relations so we know where the PARENT is
                 const hydratedVariants = await this.connection.getRepository(event.ctx, ProductVariant).find({
                     where: { id: In(ids) },
-                    relations: ['channels', 'product', 'product.channels'] 
+                    relations: ['channels', 'product', 'product.channels', 'product.customFields'] 
                 });
 
                 if (hydratedVariants.length > 0) {
-                    // Note: We do not pass the 3rd arg here, so distributeVariants will fetch it.
                     await this.distributeVariants(event.ctx, hydratedVariants);
                 }
             });
     }
 
     async performManualSync(ctx: RequestContext, sourceChannelId?: ID) {
-        const allChannelsList = await this.channelService.findAll(ctx);
-        const allChannels = allChannelsList.items;
+        // Fetch channels with custom fields to check isMerchant/isSupplier
+        const allChannelsList = await this.connection.getRepository(ctx, Channel).find();
+        
         const sourcesToProcess = sourceChannelId 
-            ? allChannels.filter(c => c.id === sourceChannelId)
-            : allChannels;
+            ? allChannelsList.filter(c => c.id === sourceChannelId)
+            : allChannelsList;
 
         let totalProcessed = 0;
 
@@ -72,14 +60,14 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
 
             while (hasMore) {
                 const variants = await repo.find({
-                    relations: ['channels', 'product', 'product.channels'], 
+                    relations: ['channels', 'product', 'product.channels', 'product.customFields'], 
                     where: { deletedAt: IsNull() },
                     take: BATCH_SIZE,
                     skip: skip
                 });
 
                 if (variants.length > 0) {
-                    await this.distributeVariants(sourceCtx, variants, allChannels);
+                    await this.distributeVariants(sourceCtx, variants, allChannelsList);
                     totalProcessed += variants.length;
                     skip += BATCH_SIZE;
                 } else {
@@ -98,108 +86,156 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
     private async distributeVariants(ctx: RequestContext, variants: ProductVariant[], allChannelsCache?: Channel[]) {
         if (!variants || variants.length === 0) return;
         
-        // --- FIX: Fetch Channels if not provided (Critical for Event Listener) ---
         let availableChannels = allChannelsCache;
         if (!availableChannels) {
-            const channelsList = await this.channelService.findAll(ctx);
-            availableChannels = channelsList.items;
+            availableChannels = await this.connection.getRepository(ctx, Channel).find();
         }
 
         const priceRepo = this.connection.getRepository(ctx, ProductVariantPrice);
         const stockRepo = this.connection.getRepository(ctx, StockLevel);
 
-        // --- DELETED "STEP 1: Parent Products" ---
-        // We no longer force Parent Products into new channels.
-        // We only respect where they ALREADY are.
-
-        // --- STEP 2: Variants ---
         for (const variant of variants) {
             if (variant.deletedAt) continue;
-            // Guard clause to ensure product relations exist
             if (!variant.channels || !variant.product || !variant.product.channels) continue;
 
-            // 1. Determine VALID Targets
-            // Rule: Target must be in the PARENT PRODUCT'S channel list.
-            const parentChannelIds = variant.product.channels.map(c => c.id);
+            // --- 1. DETERMINE OWNER & VALID TARGETS ---
             
-            // Filter: (All Channels) MINUS (Source Channel) AND MUST BE IN (Parent Channels)
-            const validTargets = availableChannels.filter(c => 
+            // Resolve Owner Code
+            const productCustomFields = (variant.product.customFields as any);
+            const productOwnerCode = productCustomFields?.ownercompany;
+
+            // 1. Filter: Only consider "Merchant" channels as valid targets for syncing
+            // We EXCLUDE isSupplier channels from receiving updates (unless they are the owner, handled separately)
+            const merchantChannels = availableChannels.filter(c => {
+                const isMerchant = (c.customFields as any)?.isMerchant || (c.customFields as any)?.isSeller; // Handle both naming conventions
+                const isSupplier = (c.customFields as any)?.isSupplier;
+                // Valid if: Is Merchant AND Not Supplier (unless your logic differs)
+                return isMerchant === true && isSupplier !== true;
+            });
+
+            // 2. Rule: Target must be subscribed to the Parent Product
+            const parentChannelIds = variant.product.channels.map(c => c.id);
+            const validTargets = merchantChannels.filter(c => 
                 c.id !== ctx.channel.id && // Not the source
-                parentChannelIds.includes(c.id) // <--- THE CRITICAL FIX
+                parentChannelIds.includes(c.id)
             );
 
-            if (validTargets.length === 0) continue;
+            // --- 2. GHOSTBUSTING (Wipe invalid variants) ---
+            // If the variant exists in a channel that is NOT a valid target, NOT the default channel, and NOT the Owner:
+            // REMOVE IT. This cleans up the "Ghost" variants.
 
-            // 2. Determine "Missing" from Valid Targets
-            const existingVariantChannelIds = variant.channels.map(c => c.id);
-            const missingChannels = validTargets.filter(c => !existingVariantChannelIds.includes(c.id));
+            const currentChannelIds = variant.channels.map(c => c.id);
+            const channelsToRemove: ID[] = [];
 
-            // A. Assign to missing channels
-            if (missingChannels.length > 0) {
-                try {
-                    await this.channelService.assignToChannels(ctx, ProductVariant, variant.id, missingChannels.map(c => c.id));
-                } catch (e) { /* Ignore */ }
+            for (const channel of availableChannels) {
+                // Skip if not currently assigned
+                if (!currentChannelIds.includes(channel.id)) continue;
+                
+                // PROTECTED CHANNELS (Do not wipe):
+                // 1. Default Channel (ID 1)
+                if (channel.id === 1 || channel.code === '__default_channel__') continue;
+                // 2. The Product Owner Channel
+                if (productOwnerCode && channel.code === productOwnerCode) continue;
+                // 3. The Current Context (prevent suicide during sync)
+                if (channel.id === ctx.channel.id) continue;
+
+                // CHECK: Is this a valid target?
+                const isValidTarget = validTargets.find(vt => vt.id === channel.id);
+                
+                if (!isValidTarget) {
+                    // It is assigned, but not valid. It is a GHOST.
+                    channelsToRemove.push(channel.id);
+                }
             }
 
-            // B. SYNC DATA (Price & Stock)
-            const sourcePriceRecord = await priceRepo.findOne({
+            if (channelsToRemove.length > 0) {
+                try {
+                    console.log(`[Ghostbuster] Wiping variant ${variant.sku} from channels: ${channelsToRemove}`);
+                    await this.channelService.removeFromChannels(ctx, ProductVariant, variant.id, channelsToRemove);
+                } catch (e) { console.error(`Failed to wipe ghosts:`, e); }
+            }
+
+            // --- 3. CRASH REPAIR (Self-Healing) ---
+            // If we are currently in the Owner Channel (or any channel), and the price is missing,
+            // the UI will crash with "No price information found". We must fix this immediately.
+            
+            let sourcePriceRecord = await priceRepo.findOne({
                 where: { variant: { id: variant.id }, channelId: ctx.channel.id }
             });
-            const priceToCopy = sourcePriceRecord ? sourcePriceRecord.price : 0;
+
+            if (!sourcePriceRecord) {
+                // REPAIR: Create a 0 price so the admin doesn't crash
+                console.log(`[CrashFix] Repairing missing price for ${variant.sku} in ${ctx.channel.code}`);
+                sourcePriceRecord = await priceRepo.save(new ProductVariantPrice({
+                    price: 0,
+                    variant: variant,
+                    channelId: ctx.channel.id,
+                    currencyCode: ctx.channel.defaultCurrencyCode,
+                }));
+            }
+
+            // --- 4. AUTHORITY CHECK ---
+            // If we are not the owner, we stop here. We cleaned up ghosts, repaired local crash, but we don't sync out.
+            if (productOwnerCode && productOwnerCode !== ctx.channel.code) {
+                continue; 
+            }
+
+            // --- 5. SYNC TO MERCHANTS ---
+            const priceToCopy = sourcePriceRecord.price;
 
             const sourceStockLevels = await stockRepo.find({
                 where: { productVariant: { id: variant.id } },
                 relations: ['stockLocation', 'stockLocation.channels']
             });
-            
-            // Calculate stock visible to CURRENT channel
             const visibleStockLevels = sourceStockLevels.filter(sl => 
                 sl.stockLocation.channels.some(c => c.id === ctx.channel.id)
             );
             const stockToCopy = visibleStockLevels.reduce((sum, level) => sum + level.stockOnHand, 0);
 
-            // Sync ONLY to valid targets
+            // Apply to Valid Merchant Targets
+            // We use 'assignToChannels' here to ensure they are added if missing
+            const targetsToAssign = validTargets.filter(vt => !currentChannelIds.includes(vt.id));
+            if (targetsToAssign.length > 0) {
+                await this.channelService.assignToChannels(ctx, ProductVariant, variant.id, targetsToAssign.map(t => t.id));
+            }
+
             for (const targetChannel of validTargets) {
                 try {
-                    // C. Write Price
-                    if (priceToCopy >= 0) {
-                        const existingPrice = await priceRepo.findOne({
-                            where: { variant: { id: variant.id }, channelId: targetChannel.id }
-                        });
+                    // Force Price Sync (Source is Truth)
+                    const existingPrice = await priceRepo.findOne({
+                        where: { variant: { id: variant.id }, channelId: targetChannel.id }
+                    });
 
-                        if (existingPrice) {
-                            if (existingPrice.price !== priceToCopy) {
-                                await priceRepo.update(existingPrice.id, { price: priceToCopy });
-                            }
-                        } else {
-                            await priceRepo.save(new ProductVariantPrice({
-                                price: priceToCopy,
-                                variant: variant,
-                                channelId: targetChannel.id,
-                                currencyCode: targetChannel.defaultCurrencyCode || ctx.channel.defaultCurrencyCode,
-                            }));
+                    if (existingPrice) {
+                        if (existingPrice.price !== priceToCopy) {
+                            await priceRepo.update(existingPrice.id, { price: priceToCopy });
                         }
+                    } else {
+                        await priceRepo.save(new ProductVariantPrice({
+                            price: priceToCopy,
+                            variant: variant,
+                            channelId: targetChannel.id,
+                            currencyCode: targetChannel.defaultCurrencyCode || ctx.channel.defaultCurrencyCode,
+                        }));
                     }
 
-                    // D. Write Stock
+                    // Force Stock Sync
                     const targetCtx = this.createChannelContext(ctx, targetChannel);
                     const existingTargetLevels = await this.connection.getRepository(targetCtx, StockLevel).find({
                         where: { productVariant: { id: variant.id } },
                         relations: ['stockLocation', 'stockLocation.channels']
                     });
 
-                    // Find a stock level in the target channel that we can update
                     const channelLevel = existingTargetLevels.find(sl => 
                         sl.stockLocation.channels.some(c => c.id === targetChannel.id)
                     );
 
                     if (channelLevel) {
-                         if (channelLevel.stockOnHand !== stockToCopy) {
-                             await stockRepo.update(channelLevel.id, { stockOnHand: stockToCopy });
-                         }
+                        if (channelLevel.stockOnHand !== stockToCopy) {
+                            await stockRepo.update(channelLevel.id, { stockOnHand: stockToCopy });
+                        }
                     }
                 } catch (e: any) {
-                     // Suppress duplicate key errors which can happen in race conditions
                      if (!e.message?.includes('duplicate key')) {
                          console.error(`[GlobalSync] Error: ${e.message}`);
                      }
