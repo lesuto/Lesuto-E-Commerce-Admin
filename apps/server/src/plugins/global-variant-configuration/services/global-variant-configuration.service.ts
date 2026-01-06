@@ -23,37 +23,31 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
         this.eventBus.ofType(ProductVariantEvent)
             .pipe(filter(event => event.type === 'created' || event.type === 'updated'))
             .subscribe(async (event) => {
+                // Smart Poll for Price/Stock availability to ensure transaction committed
                 const entities = Array.isArray(event.entity) ? event.entity : [event.entity];
                 const ids = entities.map(v => v.id);
-
-                // --- SMART POLLING FIX ---
-                // We poll the DB briefly to wait for Price/Stock to be committed
-                // Max wait: 2 seconds (10 attempts * 200ms)
                 let attempts = 0;
                 let ready = false;
 
                 while (attempts < 10 && !ready) {
-                    // Check if price exists for the first variant in the batch
                     const check = await this.connection.getRepository(event.ctx, ProductVariantPrice).findOne({
                         where: { variant: { id: ids[0] }, channelId: event.ctx.channelId }
                     });
-
-                    // If we found a price (that isn't 0, optional), we are ready to roll
-                    if (check) {
-                        ready = true;
-                    } else {
-                        await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms
+                    if (check) ready = true;
+                    else {
+                        await new Promise(resolve => setTimeout(resolve, 200));
                         attempts++;
                     }
                 }
-                // -------------------------
 
+                // FIX: Added 'product.channels' to relations so we know where the PARENT is
                 const hydratedVariants = await this.connection.getRepository(event.ctx, ProductVariant).find({
                     where: { id: In(ids) },
-                    relations: ['channels', 'product'] 
+                    relations: ['channels', 'product', 'product.channels'] 
                 });
 
                 if (hydratedVariants.length > 0) {
+                    // Note: We do not pass the 3rd arg here, so distributeVariants will fetch it.
                     await this.distributeVariants(event.ctx, hydratedVariants);
                 }
             });
@@ -78,7 +72,7 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
 
             while (hasMore) {
                 const variants = await repo.find({
-                    relations: ['channels', 'product'], 
+                    relations: ['channels', 'product', 'product.channels'], 
                     where: { deletedAt: IsNull() },
                     take: BATCH_SIZE,
                     skip: skip
@@ -104,33 +98,41 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
     private async distributeVariants(ctx: RequestContext, variants: ProductVariant[], allChannelsCache?: Channel[]) {
         if (!variants || variants.length === 0) return;
         
-        const allChannels = allChannelsCache || (await this.channelService.findAll(ctx)).items;
-        const potentialTargets = allChannels.filter(c => c.id !== ctx.channel.id);
-        if (potentialTargets.length === 0) return;
+        // --- FIX: Fetch Channels if not provided (Critical for Event Listener) ---
+        let availableChannels = allChannelsCache;
+        if (!availableChannels) {
+            const channelsList = await this.channelService.findAll(ctx);
+            availableChannels = channelsList.items;
+        }
 
         const priceRepo = this.connection.getRepository(ctx, ProductVariantPrice);
         const stockRepo = this.connection.getRepository(ctx, StockLevel);
 
-        // --- STEP 1: Parent Products ---
-        const uniqueProducts = new Map<string, Product>();
-        variants.forEach(v => {
-            const p = v.product;
-            if (p && !uniqueProducts.has(p.id.toString())) uniqueProducts.set(p.id.toString(), p);
-        });
+        // --- DELETED "STEP 1: Parent Products" ---
+        // We no longer force Parent Products into new channels.
+        // We only respect where they ALREADY are.
 
-        for (const product of uniqueProducts.values()) {
-            try {
-                 await this.channelService.assignToChannels(ctx, Product, product.id, potentialTargets.map(c => c.id));
-            } catch (e) { /* Ignore */ }
-        }
-
-        // --- STEP 2: Variants (Sequential for Safety) ---
+        // --- STEP 2: Variants ---
         for (const variant of variants) {
             if (variant.deletedAt) continue;
-            if (!variant.channels) continue;
+            // Guard clause to ensure product relations exist
+            if (!variant.channels || !variant.product || !variant.product.channels) continue;
 
-            const existingChannelIds = variant.channels.map(c => c.id);
-            const missingChannels = potentialTargets.filter(c => !existingChannelIds.includes(c.id));
+            // 1. Determine VALID Targets
+            // Rule: Target must be in the PARENT PRODUCT'S channel list.
+            const parentChannelIds = variant.product.channels.map(c => c.id);
+            
+            // Filter: (All Channels) MINUS (Source Channel) AND MUST BE IN (Parent Channels)
+            const validTargets = availableChannels.filter(c => 
+                c.id !== ctx.channel.id && // Not the source
+                parentChannelIds.includes(c.id) // <--- THE CRITICAL FIX
+            );
+
+            if (validTargets.length === 0) continue;
+
+            // 2. Determine "Missing" from Valid Targets
+            const existingVariantChannelIds = variant.channels.map(c => c.id);
+            const missingChannels = validTargets.filter(c => !existingVariantChannelIds.includes(c.id));
 
             // A. Assign to missing channels
             if (missingChannels.length > 0) {
@@ -139,29 +141,28 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
                 } catch (e) { /* Ignore */ }
             }
 
-            // B. SYNC DATA (Direct DB Fetch & Write)
-            
-            // 1. Fetch Price from Source (The Smart Poll ensured it's there now)
+            // B. SYNC DATA (Price & Stock)
             const sourcePriceRecord = await priceRepo.findOne({
                 where: { variant: { id: variant.id }, channelId: ctx.channel.id }
             });
             const priceToCopy = sourcePriceRecord ? sourcePriceRecord.price : 0;
 
-            // 2. Fetch Stock from Source
             const sourceStockLevels = await stockRepo.find({
                 where: { productVariant: { id: variant.id } },
                 relations: ['stockLocation', 'stockLocation.channels']
             });
+            
+            // Calculate stock visible to CURRENT channel
             const visibleStockLevels = sourceStockLevels.filter(sl => 
                 sl.stockLocation.channels.some(c => c.id === ctx.channel.id)
             );
             const stockToCopy = visibleStockLevels.reduce((sum, level) => sum + level.stockOnHand, 0);
 
-            // 3. Push Updates
-            for (const targetChannel of potentialTargets) {
+            // Sync ONLY to valid targets
+            for (const targetChannel of validTargets) {
                 try {
                     // C. Write Price
-                    if (priceToCopy >= 0) { // Changed to >= 0 to allow syncing 0 if intended
+                    if (priceToCopy >= 0) {
                         const existingPrice = await priceRepo.findOne({
                             where: { variant: { id: variant.id }, channelId: targetChannel.id }
                         });
@@ -187,6 +188,7 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
                         relations: ['stockLocation', 'stockLocation.channels']
                     });
 
+                    // Find a stock level in the target channel that we can update
                     const channelLevel = existingTargetLevels.find(sl => 
                         sl.stockLocation.channels.some(c => c.id === targetChannel.id)
                     );
@@ -196,8 +198,8 @@ export class GlobalVariantConfigurationService implements OnApplicationBootstrap
                              await stockRepo.update(channelLevel.id, { stockOnHand: stockToCopy });
                          }
                     }
-
                 } catch (e: any) {
+                     // Suppress duplicate key errors which can happen in race conditions
                      if (!e.message?.includes('duplicate key')) {
                          console.error(`[GlobalSync] Error: ${e.message}`);
                      }
