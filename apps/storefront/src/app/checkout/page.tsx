@@ -12,6 +12,7 @@ import {CheckoutProvider} from './checkout-provider';
 import {noIndexRobots} from '@/lib/metadata';
 import {getActiveCustomer} from '@/lib/vendure/actions';
 import {getAvailableCountriesCached} from '@/lib/vendure/cached';
+import { getChannelToken } from "@/lib/channel-helper"; // 1. IMPORT HELPER
 
 export const metadata: Metadata = {
     title: 'Checkout',
@@ -20,19 +21,45 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage(_props: PageProps<'/checkout'>) {
+    // 2. GET TOKEN
+    const token = await getChannelToken();
+
     // Check if user is authenticated
+    // (Note: getActiveCustomer likely needs the token too, but let's fix the main crash first)
     const customer = await getActiveCustomer();
     if (!customer) {
         redirect('/sign-in?redirectTo=/checkout');
     }
 
+    // 3. PASS TOKEN TO EVERY QUERY
     const [orderRes, addressesRes, countries, shippingMethodsRes, paymentMethodsRes] =
         await Promise.all([
-            query(GetActiveOrderForCheckoutQuery, {}, {useAuthToken: true}),
-            query(GetCustomerAddressesQuery, {}, {useAuthToken: true}),
-            getAvailableCountriesCached(),
-            query(GetEligibleShippingMethodsQuery, {}, {useAuthToken: true}),
-            query(GetEligiblePaymentMethodsQuery, {}, {useAuthToken: true}),
+            // Fix: Active Order needs to know WHICH store's order to fetch
+            query(GetActiveOrderForCheckoutQuery, {}, {
+                useAuthToken: true, 
+                channelToken: token 
+            }),
+            
+            // Fix: Addresses need to be fetched for this channel context
+            query(GetCustomerAddressesQuery, {}, {
+                useAuthToken: true,
+                channelToken: token
+            }),
+            
+            // Fix: This was the specific error you saw
+            getAvailableCountriesCached(token),
+            
+            // Fix: Shipping methods vary by channel
+            query(GetEligibleShippingMethodsQuery, {}, {
+                useAuthToken: true,
+                channelToken: token
+            }),
+            
+            // Fix: Payment methods vary by channel
+            query(GetEligiblePaymentMethodsQuery, {}, {
+                useAuthToken: true,
+                channelToken: token
+            }),
         ]);
 
     const activeOrder = orderRes.data.activeOrder;
@@ -42,7 +69,6 @@ export default async function CheckoutPage(_props: PageProps<'/checkout'>) {
     }
 
     // If the order is no longer in AddingItems state, it's been completed
-    // Redirect to the order confirmation page
     if (activeOrder.state !== 'AddingItems' && activeOrder.state !== 'ArrangingPayment') {
         return redirect(`/order-confirmation/${activeOrder.code}`);
     }

@@ -1,41 +1,31 @@
-import {cacheLife, cacheTag} from 'next/cache';
-import {query} from './api';
-import {GetActiveChannelQuery, GetAvailableCountriesQuery, GetTopCollectionsQuery} from './queries';
+import { cacheLife, cacheTag } from 'next/cache';
+import { query } from './api';
+import { GetActiveChannelQuery, GetAvailableCountriesQuery, GetTopCollectionsQuery } from './queries';
 
-/**
- * Get the active channel with caching enabled.
- * Channel configuration rarely changes, so we cache it for 1 hour.
- */
-export async function getActiveChannelCached() {
+// 1. ACTIVE CHANNEL
+export async function getActiveChannelCached(channelToken: string) {
     'use cache';
     cacheLife('hours');
-
-    const result = await query(GetActiveChannelQuery);
+    const result = await query(GetActiveChannelQuery, {}, { channelToken });
     return result.data.activeChannel;
 }
 
-/**
- * Get available countries with caching enabled.
- * Countries list never changes, so we cache it with max duration.
- */
-export async function getAvailableCountriesCached() {
+// 2. COUNTRIES
+export async function getAvailableCountriesCached(channelToken: string) {
     'use cache';
     cacheLife('max');
     cacheTag('countries');
-
-    const result = await query(GetAvailableCountriesQuery);
+    const result = await query(GetAvailableCountriesQuery, {}, { channelToken });
     return result.data.availableCountries || [];
 }
 
-/**
- * Get top-level collections with caching enabled.
- * Collections rarely change, so we cache them for 1 day.
- */
-export async function getTopCollections() {
+// 3. TOP COLLECTIONS (Used in Navbar/Footer)
+export async function getTopCollections(channelToken: string) {
     'use cache';
     cacheLife('days');
     cacheTag('collections');
-
-    const result = await query(GetTopCollectionsQuery);
+    
+    // Explicitly pass token so the cache key is unique per store
+    const result = await query(GetTopCollectionsQuery, {}, { channelToken });
     return result.data.collections.items;
 }

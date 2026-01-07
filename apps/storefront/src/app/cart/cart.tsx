@@ -4,11 +4,18 @@ import {PromotionCode} from "@/app/cart/promotion-code";
 import {query} from "@/lib/vendure/api";
 import {GetActiveOrderQuery} from "@/lib/vendure/queries";
 
-export async function Cart() {
+// 1. ADD INTERFACE
+interface CartProps {
+    channelToken: string;
+}
+
+// 2. ACCEPT PROP
+export async function Cart({ channelToken }: CartProps) {
     "use cache: private"
 
     const {data} = await query(GetActiveOrderQuery, {}, {
         useAuthToken: true,
+        channelToken: channelToken, // 3. PASS TO API
     });
 
     const activeOrder = data.activeOrder;

@@ -9,28 +9,27 @@ import {SearchProductsQuery} from "@/lib/vendure/queries";
 interface SearchResultsProps {
     searchParams: Promise<{
         page?: string
-    }>
+    }>;
+    channelToken: string; // <--- 1. ADDED THIS
 }
 
-export async function SearchResults({searchParams}: SearchResultsProps) {
+export async function SearchResults({searchParams, channelToken}: SearchResultsProps) {
     const searchParamsResolved = await searchParams;
     const page = getCurrentPage(searchParamsResolved);
 
+    // 2. PASS TOKEN TO API
     const productDataPromise = query(SearchProductsQuery, {
         input: buildSearchInput({searchParams: searchParamsResolved})
-    });
-
+    }, { channelToken }); 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Filters Sidebar */}
             <aside className="lg:col-span-1">
                 <Suspense fallback={<div className="h-64 animate-pulse bg-muted rounded-lg"/>}>
                     <FacetFilters productDataPromise={productDataPromise}/>
                 </Suspense>
             </aside>
 
-            {/* Product Grid */}
             <div className="lg:col-span-3">
                 <Suspense fallback={<ProductGridSkeleton/>}>
                     <ProductGrid productDataPromise={productDataPromise} currentPage={page} take={12}/>

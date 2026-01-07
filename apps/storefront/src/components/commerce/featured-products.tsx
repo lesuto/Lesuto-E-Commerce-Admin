@@ -1,55 +1,29 @@
-import {ProductCarousel} from "@/components/commerce/product-carousel";
-import {query} from "@/lib/vendure/api";
-import {GetCollectionProductsQuery} from "@/lib/vendure/queries";
-import { headers } from 'next/headers';
+import { ProductCarousel } from "@/components/commerce/product-carousel";
+import { query } from "@/lib/vendure/api";
+import { GetCollectionProductsQuery } from "@/lib/vendure/queries";
 
-async function getChannelToken(subdomain: string): Promise<string> {
-  if (!subdomain || subdomain === 'shop' || subdomain === 'localhost') return '__default_channel__';
-  const apiUrl = process.env.VENDURE_SHOP_API_URL || 'http://localhost:3000/shop-api';
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `query GetChannelToken($channelCode: String!) { getChannelToken(channelCode: $channelCode) }`,
-        variables: { channelCode: subdomain },
-      }),
-      cache: 'no-store',
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const { data } = await response.json();
-    return data?.getChannelToken || '__default_channel__';
-  } catch (error) {
-    console.error('Channel token error:', error);
-    return '__default_channel__';
-  }
+// 1. ADD INTERFACE
+interface FeaturedProductsProps {
+    channelToken: string;
 }
 
-async function getFeaturedCollectionProducts() {
-
-    const headersList = await headers(); // Add await
-    const host = headersList.get('host') || 'shop.lesuto.local';
-    const subdomain = host.split('.')[0].toLowerCase();
-
-    const channelToken = await getChannelToken(subdomain);
-
-    // Fetch featured products from a specific collection
-    // Replace 'electronics' with your actual collection slug
+// 2. ACCEPT THE PROP
+export async function FeaturedProducts({ channelToken }: FeaturedProductsProps) {
+    
+    // 3. USE THE TOKEN IN THE QUERY
+    // Note: You might want to change "electronics" to a dynamic slug later, 
+    // or ensure every store has a collection with this slug.
     const result = await query(GetCollectionProductsQuery, {
-        slug: "electronics",
+        slug: "electronics", 
         input: {
             collectionSlug: "electronics",
             take: 12,
             skip: 0,
             groupByProduct: true
         }
-    }, { channelToken });
+    }, { channelToken }); // <--- PASS TOKEN HERE
 
-    return result.data.search.items;
-}
-
-export async function FeaturedProducts() {
-    const products = await getFeaturedCollectionProducts();
+    const products = result.data.search?.items || [];
 
     return (
         <ProductCarousel
