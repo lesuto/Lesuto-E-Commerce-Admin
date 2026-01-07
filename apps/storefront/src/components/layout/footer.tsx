@@ -1,13 +1,56 @@
-import {cacheLife} from 'next/cache';
 import {getTopCollections} from '@/lib/vendure/cached';
 import Image from "next/image";
 import Link from "next/link";
+import { headers } from 'next/headers';
+import { DEFAULT_CONTENT } from '@/app/providers/channel-provider';
 
+async function getChannelToken(subdomain: string): Promise<string> {
+  if (!subdomain || subdomain === 'shop' || subdomain === 'localhost') return '__default_channel__';
+  const apiUrl = process.env.VENDURE_SHOP_API_URL || 'http://localhost:3000/shop-api';
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `query GetChannelToken($channelCode: String!) { getChannelToken(channelCode: $channelCode) }`,
+        variables: { channelCode: subdomain },
+      }),
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { data } = await response.json();
+    return data?.getChannelToken || '__default_channel__';
+  } catch (error) {
+    console.error('Channel token error:', error);
+    return '__default_channel__';
+  }
+}
+
+async function getCmsContent(channelToken: string): Promise<typeof DEFAULT_CONTENT> {
+  const apiUrl = process.env.VENDURE_SHOP_API_URL || 'http://localhost:3000/shop-api';
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'vendure-token': channelToken,
+      },
+      body: JSON.stringify({
+        query: `query GetCmsPage($slug: String!) { page(slug: $slug) { blocks } }`,
+        variables: { slug: 'home' },
+      }),
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { data } = await response.json();
+    return { ...DEFAULT_CONTENT, ...data?.page?.blocks };
+  } catch (error) {
+    console.error('CMS error:', error);
+    return DEFAULT_CONTENT;
+  }
+}
 
 async function Copyright() {
-    'use cache'
-    cacheLife('days');
-
     return (
         <div>
             © {new Date().getFullYear()} Vendure Store. All rights reserved.
@@ -16,9 +59,12 @@ async function Copyright() {
 }
 
 export async function Footer() {
-    'use cache'
-    cacheLife('days');
+    const headersList = await headers();
+    const host = headersList.get('host') || 'shop.lesuto.local';
+    const subdomain = host.split('.')[0].toLowerCase();
 
+    const channelToken = await getChannelToken(subdomain);
+    const cmsContent = await getCmsContent(channelToken);
     const collections = await getTopCollections();
 
     return (
@@ -110,6 +156,15 @@ export async function Footer() {
                     </div>
                 </div>
             </div>
+            <section className="py-8 bg-gray-800 text-white text-center">
+              <p>Contact: {cmsContent.contactEmail}</p>
+            </section>
+            <section className="py-16">
+              <div className="container mx-auto px-4">
+                <h2 className="text-3xl font-semibold mb-4">About Us</h2>
+                <p className="text-muted-foreground">{cmsContent.aboutUs}</p>
+              </div>
+            </section>
         </footer>
     );
 }

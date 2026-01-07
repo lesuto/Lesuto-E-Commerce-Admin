@@ -1,11 +1,10 @@
 import type {Metadata, Viewport} from "next";
 import {Geist, Geist_Mono} from "next/font/google";
 import "./globals.css";
-import {Toaster} from "@/components/ui/sonner";
-import {Navbar} from "@/components/layout/navbar";
-import {Footer} from "@/components/layout/footer";
+import {Suspense} from 'react';
 import {ThemeProvider} from "@/components/providers/theme-provider";
 import {SITE_NAME, SITE_URL} from "@/lib/metadata";
+import { DynamicContent } from './dynamic-content';
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -63,10 +62,9 @@ export default function RootLayout({children}: LayoutProps<'/'>) {
                 className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
             >
                 <ThemeProvider>
-                    <Navbar />
-                    {children}
-                    <Footer />
-                    <Toaster />
+                    <Suspense fallback={<div>Loading...</div>}>
+                        <DynamicContent>{children}</DynamicContent>
+                    </Suspense>
                 </ThemeProvider>
             </body>
         </html>

@@ -31,7 +31,6 @@ function extractAuthToken(headers: Headers): string | null {
     return headers.get(VENDURE_AUTH_TOKEN_HEADER);
 }
 
-
 /**
  * Execute a GraphQL query against the Vendure API
  */
@@ -76,6 +75,7 @@ export async function query<TResult, TVariables>(
             variables: variables || {},
         }),
         ...(tags && {next: {tags}}),
+        cache: 'no-store',
     });
 
     if (!response.ok) {

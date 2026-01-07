@@ -37,6 +37,8 @@ import path from 'path';
 import { GlobalLoadingScreenPlugin } from './plugins/global-loading-screen/global-loading-screen.plugin';
 import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
 import { GlobalVariantConfigurationPlugin } from './plugins/global-variant-configuration/global-variant-configuration.plugin';
+import { TenantPlugin } from './plugins/tenant/tenant.plugin';
+import { CmsPlugin } from './plugins/cms/cms.plugin';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -156,5 +158,7 @@ export const config: VendureConfig = {
         GlobalLoadingScreenPlugin.init({}),
         GlobalFacetConfigurationPlugin.init({}),
         GlobalVariantConfigurationPlugin.init({}),
+        TenantPlugin.init({}),
+        CmsPlugin.init({}),
     ],
 };
