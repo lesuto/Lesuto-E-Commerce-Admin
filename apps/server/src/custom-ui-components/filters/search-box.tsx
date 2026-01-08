@@ -2,7 +2,7 @@ import React from 'react';
 import { Search } from 'lucide-react';
 
 interface SearchBoxProps {
-  value: string;
+  value: 'string';
   onChange: (value: string) => void;
   placeholder?: string;
 }

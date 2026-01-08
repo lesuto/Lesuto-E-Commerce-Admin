@@ -8,5 +8,6 @@ export * from './surfaces/sidebar-panel';
 export * from './surfaces/product-grid-card';
 export * from './surfaces/category-card';
 export * from './overlays/modal';
+export * from './overlays/product-detail-modal'; 
 export * from './feedback/status-toast';
 export * from './navigation/pagination-toolbar';

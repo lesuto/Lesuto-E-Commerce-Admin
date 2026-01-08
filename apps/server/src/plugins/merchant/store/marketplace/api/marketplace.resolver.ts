@@ -2,7 +2,6 @@ import { Ctx, RequestContext, Allow, Channel } from '@vendure/core';
 import { Args, Mutation, Query, Resolver, ResolveField, Parent } from '@nestjs/graphql';
 import { Permission } from '@vendure/common/lib/generated-types';
 import { MarketplaceService } from '../services/marketplace.service';
-// Import the options type
 import { ProductListOptions } from '@vendure/common/lib/generated-types';
 
 @Resolver('Channel')
@@ -21,15 +20,17 @@ export class MarketplaceResolver {
         return this.marketplaceService.getSupplierChannel(ctx, id);
     }
 
-    // --- UPDATED THIS METHOD ---
+    // --- UPDATED ---
     @Query()
     @Allow(Permission.ReadChannel)
     async supplierProducts(
         @Ctx() ctx: RequestContext, 
         @Args('supplierChannelId') id: string,
-        @Args('options') options?: ProductListOptions // Accept options
+        @Args('options') options?: ProductListOptions,
+        @Args('facetValueIds') facetValueIds?: string[], // New Argument
+        @Args('term') term?: string                      // New Argument
     ) {
-        return this.marketplaceService.getSupplierProducts(ctx, id, options);
+        return this.marketplaceService.getSupplierProducts(ctx, id, options, facetValueIds, term);
     }
 
     @ResolveField()

@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, Page, PageLayout, PageBlock, PageTitle } from '@vendure/dashboard';
-import { Store, Layers, Eye, Tag, Loader, Search, Trash2, AlertCircle } from 'lucide-react';
+import { Store, Layers, Search, Trash2, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { 
   ProductBrowseLayout, ProductToolbar, CheckboxFilterList, 
-  ProductGridCard, Modal, StatusToast, PaginationToolbar 
+  ProductGridCard, StatusToast, PaginationToolbar, 
+  ProductDetailModal 
 } from '../../../../../custom-ui-components';
 
 import '../../../../../custom-ui-components/css/ui-surfaces.css';
@@ -25,27 +26,29 @@ const GET_MY_PRODUCTS_PAGINATED = graphql(`
   }
 `);
 
-const GET_FILTERS = graphql(`
-  query GetInventoryFilters {
-    products(options: { take: 500 }) {
-      items { facetValues { id name }, customFields { ownercompany } }
+const GET_PRODUCT_DETAIL = graphql(`
+  query GetProductDetail($id: ID!) {
+    product(id: $id) {
+      id name description
+      featuredAsset { preview }
+      customFields { basePrice ownercompany }
+      variants {
+        id name sku price stockLevel
+        options { code name }
+      }
     }
   }
 `);
 
+const GET_FILTERS = graphql(`query GetInventoryFilters { products(options: { take: 500 }) { items { facetValues { id name }, customFields { ownercompany } } } }`);
 const REMOVE_FROM_CHANNEL = graphql(`mutation RemoveFromChannel($productId: ID!) { removeProductFromMyChannel(productId: $productId) }`);
 const GET_SUPPLIER_MAP = graphql(`query GetSupplierMap { marketplaceSuppliers { code, supplierProfile { nameCompany } } }`);
 
 export function InventoryComponent() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
-  // This state controls the Modal
-  const [viewProduct, setViewProduct] = useState<any | null>(null);
-  
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<any>(null);
-
-  // Pagination & Filter State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,21 +56,24 @@ export function InventoryComponent() {
   const [selectedFacets, setSelectedFacets] = useState<Set<string>>(new Set());
   const [selectedSuppliers, setSelectedSuppliers] = useState<Set<string>>(new Set());
 
-  // Queries
+  // --- Main Query ---
   const productsQuery = useQuery({
-    queryKey: ['myProducts', currentPage, pageSize, debouncedSearch, Array.from(selectedFacets), Array.from(selectedSuppliers)],
+    queryKey: ['myProducts', currentPage, pageSize, debouncedSearch],
     queryFn: () => api.query(GET_MY_PRODUCTS_PAGINATED, {
       options: {
         skip: (currentPage - 1) * pageSize,
         take: pageSize,
         sort: { createdAt: 'DESC' },
-        filter: {
-          name: { contains: debouncedSearch },
-          ...(selectedFacets.size > 0 ? { facetValueId: { in: Array.from(selectedFacets) } } : {})
-        }
+        filter: { name: { contains: debouncedSearch } }
       }
     }),
     placeholderData: (prev) => prev,
+  });
+
+  const detailQuery = useQuery({
+    queryKey: ['productDetail', viewProductId],
+    queryFn: () => api.query(GET_PRODUCT_DETAIL, { id: viewProductId! }),
+    enabled: !!viewProductId, 
   });
 
   const filterQuery = useQuery({ queryKey: ['inventoryFilters'], queryFn: () => api.query(GET_FILTERS, {}), staleTime: 60000 });
@@ -77,16 +83,15 @@ export function InventoryComponent() {
     mutationFn: ({ productId }: { productId: string }) => api.mutate(REMOVE_FROM_CHANNEL, { productId }),
     onSuccess: () => {
       productsQuery.refetch();
-      setViewProduct(null); // Close modal on success
+      setViewProductId(null);
       setStatusMessage({ msg: 'Product removed', type: 'success' });
     },
   });
 
-  // Helpers
+  // --- Helpers ---
   const rawItems = productsQuery.data?.products?.items || [];
   const totalItems = productsQuery.data?.products?.totalItems || 0;
   
-  // FIX: Deduplicate items to prevent tripling
   const dedupedItems = useMemo(() => {
     return Array.from(new Map(rawItems.map(item => [item.id, item])).values());
   }, [rawItems]);
@@ -102,23 +107,19 @@ export function InventoryComponent() {
   const getPrice = (p: any) => p.variants?.[0]?.price || 0;
   const getEarnings = (p: any) => getPrice(p) - (p.customFields?.basePrice || 0);
 
-  // Filters List
   const filters = useMemo(() => {
     const raw = filterQuery.data?.products?.items || [];
     const facets = new Map(), suppliers = new Set();
-    
     raw.forEach((p: any) => {
       p.facetValues?.forEach((f: any) => facets.set(f.id, f.name));
       if(p.customFields?.ownercompany) suppliers.add(p.customFields.ownercompany);
     });
-
     return {
       facets: Array.from(facets.entries()).map(([id, name]) => ({ id, name, count: 0 })),
       suppliers: Array.from(suppliers).map((code: any) => ({ id: code, name: getSupplierName(code), count: 0 }))
     };
   }, [filterQuery.data, supplierMapQuery.data]);
 
-  // Actions
   const toggleSelection = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const handleBulkRemove = async () => {
@@ -130,6 +131,15 @@ export function InventoryComponent() {
     setTimeout(() => setStatusMessage(null), 2000);
   };
 
+  // --- Client Side Filtering ---
+  const filteredDisplayItems = useMemo(() => {
+    return dedupedItems.filter(p => {
+        const matchSupplier = selectedSuppliers.size === 0 || selectedSuppliers.has(p.customFields?.ownercompany || 'Unknown');
+        const matchFacet = selectedFacets.size === 0 || (p.facetValues || []).some((fv: any) => selectedFacets.has(fv.id));
+        return matchSupplier && matchFacet;
+    });
+  }, [dedupedItems, selectedSuppliers, selectedFacets]);
+
   return (
     <Page pageId="merchant-inventory">
       <PageTitle>My Inventory</PageTitle>
@@ -138,60 +148,52 @@ export function InventoryComponent() {
           <ProductBrowseLayout
             sidebar={
               <div className="space-y-4 w-full">
-                {/* SEARCH PANEL: Fixed Theme Colors */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors">
-                   <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2">Search</h3>
+                {/* Search */}
+                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                    <div className="relative">
                       <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
                       <input 
                         type="text" 
                         placeholder="Search..." 
-                        className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                        className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                         value={searchTerm} 
                         onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
                       />
                    </div>
                 </div>
-
-                {/* SUPPLIER PANEL */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors">
-                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2">
-                        <Store size={14}/> Suppliers
-                    </h3>
-                    <CheckboxFilterList 
-                        items={filters.suppliers} 
-                        selected={selectedSuppliers} 
-                        onToggle={id => { 
-                            setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-                            setCurrentPage(1);
-                        }} 
-                    />
+                {/* Filters */}
+                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2"><Store size={14}/> Suppliers</h3>
+                    <CheckboxFilterList items={filters.suppliers} selected={selectedSuppliers} onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} />
                 </div>
-
-                {/* CATEGORY PANEL */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 transition-colors">
-                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2">
-                         <Layers size={14}/> Categories
-                    </h3>
-                    <CheckboxFilterList 
-                        items={filters.facets} 
-                        selected={selectedFacets} 
-                        onToggle={id => {
-                            setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-                            setCurrentPage(1);
-                        }} 
-                    />
+                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2"><Layers size={14}/> Categories</h3>
+                    <CheckboxFilterList items={filters.facets} selected={selectedFacets} onToggle={id => { setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} />
                 </div>
               </div>
             }
           >
             <ProductToolbar count={totalItems} selectedCount={selectedIds.size} bulkRemoveCount={selectedIds.size} onBulkRemove={handleBulkRemove} viewMode={viewMode} setViewMode={setViewMode} />
 
-            {productsQuery.isLoading ? <div className="p-12 text-center"><Loader className="animate-spin inline" /></div> : (
+            {/* --- ERROR STATE --- */}
+            {productsQuery.isError ? (
+              <div className="p-8 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 text-center">
+                <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+                <h3 className="text-red-700 dark:text-red-400 font-bold mb-1">Unable to load inventory</h3>
+                <button 
+                  onClick={() => productsQuery.refetch()} 
+                  className="px-4 py-2 mt-4 bg-white dark:bg-red-900 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-100 rounded-lg text-sm font-bold flex items-center gap-2 mx-auto hover:shadow-sm"
+                >
+                  <RefreshCw size={14} /> Retry
+                </button>
+              </div>
+            ) : productsQuery.isLoading ? (
+              <div className="p-24 text-center">
+                <Loader className="animate-spin inline text-blue-600 w-8 h-8" />
+              </div>
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                 {dedupedItems
-                    .filter(p => selectedSuppliers.size === 0 || selectedSuppliers.has(p.customFields?.ownercompany || 'Unknown'))
-                    .map((p: any) => (
+                 {filteredDisplayItems.map((p: any) => (
                     <ProductGridCard
                       key={p.id}
                       name={p.name}
@@ -201,75 +203,32 @@ export function InventoryComponent() {
                       earnings={formatPrice(getEarnings(p))}
                       isAdded={true}
                       isSelected={selectedIds.has(p.id)}
-                      onView={() => setViewProduct(p)} // Triggers Modal
+                      onView={() => setViewProductId(p.id)} 
                       onSelect={() => toggleSelection(p.id)}
                       onToggle={() => { if(confirm('Remove?')) removeProduct({ productId: p.id }) }}
                     />
                  ))}
+                 {filteredDisplayItems.length === 0 && <div className="col-span-full py-12 text-center text-gray-400">No products match your filters.</div>}
               </div>
             )}
 
-            {/* Pagination Logic */}
-            <PaginationToolbar 
-                currentPage={currentPage} 
-                totalItems={totalItems} 
-                pageSize={pageSize} 
-                onPageChange={setCurrentPage} 
-                onPageSizeChange={setPageSize} 
-            />
+            <PaginationToolbar currentPage={currentPage} totalItems={totalItems} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
             
-            {/* THE MODAL: This was missing in the previous response */}
-            {viewProduct && (
-              <Modal isOpen={true} onClose={() => setViewProduct(null)} title={viewProduct.name}>
-                 <div className="flex flex-col sm:flex-row gap-6">
-                    <div className="sm:w-2/5 shrink-0">
-                       <div className="aspect-square rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-800/20 flex items-center justify-center">
-                          {viewProduct.featuredAsset ? (
-                             <img src={viewProduct.featuredAsset.preview} className="w-full h-full object-cover" />
-                          ) : (
-                             <Eye size={48} className="text-gray-400" />
-                          )}
-                       </div>
-                    </div>
-                    <div className="sm:w-3/5 space-y-4">
-                       <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 ui-surface-muted rounded-xl text-center">
-                             <div className="text-xs uppercase font-bold mb-1 opacity-70">Retail</div>
-                             <div className="text-xl font-bold ui-text-primary">{formatPrice(getPrice(viewProduct))}</div>
-                          </div>
-                          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-200 dark:border-emerald-800 text-center">
-                             <div className="text-xs text-emerald-600 dark:text-emerald-400 uppercase font-bold mb-1">Profit</div>
-                             <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">+{formatPrice(getEarnings(viewProduct))}</div>
-                          </div>
-                       </div>
-                       
-                       {/* Description */}
-                       <div 
-                         className="text-sm ui-text-primary opacity-80 prose prose-sm max-w-none" 
-                         dangerouslySetInnerHTML={{ __html: viewProduct.description || 'No description available.' }} 
-                       />
-                       
-                       {/* Supplier Info Badge */}
-                       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-100 dark:border-blue-800">
-                          <Store size={14} />
-                          {getSupplierName(viewProduct.customFields?.ownercompany)}
-                       </div>
-                    </div>
-                 </div>
-                 
-                 <div slot="footer">
-                    <button onClick={() => setViewProduct(null)} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 transition-colors">
-                      Close
-                    </button>
+            {/* --- REUSABLE PRODUCT DETAIL MODAL --- */}
+            <ProductDetailModal
+                isOpen={!!viewProductId}
+                onClose={() => setViewProductId(null)}
+                isLoading={detailQuery.isLoading}
+                product={detailQuery.data?.product}
+                actionButton={
                     <button 
-                       onClick={() => { if(confirm('Remove this product?')) removeProduct({ productId: viewProduct.id }) }} 
-                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium shadow-sm"
+                       onClick={() => { if(confirm('Remove this product?')) removeProduct({ productId: viewProductId! }) }} 
+                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium shadow-sm transition-colors"
                     >
                        <Trash2 size={16} /> Remove from Inventory
                     </button>
-                 </div>
-              </Modal>
-            )}
+                }
+            />
             
             {statusMessage && <StatusToast message={statusMessage.msg} type={statusMessage.type} onDismiss={() => setStatusMessage(null)} />}
           </ProductBrowseLayout>

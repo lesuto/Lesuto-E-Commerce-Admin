@@ -10,6 +10,17 @@ export const marketplaceSchema = gql`
         logo: Asset
     }
 
+    type FacetCount {
+        facetValue: FacetValue!
+        count: Int!
+    }
+
+    type SupplierProductList {
+        items: [Product!]!
+        totalItems: Int!
+        facets: [FacetCount!]!
+    }
+
     extend type Channel {
         isSubscription: Boolean
         supplierProfile: MarketplaceVendorProfile
@@ -24,9 +35,12 @@ export const marketplaceSchema = gql`
     extend type Query {
         marketplaceSuppliers: [Channel!]!
         
-        # --- UPDATED THIS LINE ---
-        # Changed return type to ProductList! and added options argument
-        supplierProducts(supplierChannelId: ID!, options: ProductListOptions): ProductList!
+        supplierProducts(
+            supplierChannelId: ID!, 
+            options: ProductListOptions,
+            facetValueIds: [ID!],
+            term: String
+        ): SupplierProductList!
         
         supplier(supplierChannelId: ID!): Channel
     }

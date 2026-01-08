@@ -2,49 +2,38 @@ import {
     dummyPaymentHandler,
     DefaultJobQueuePlugin,
     DefaultSchedulerPlugin,
-    DefaultSearchPlugin,
     VendureConfig,
     LanguageCode,
-    Permission,
     DefaultProductVariantPriceUpdateStrategy
 } from '@vendure/core';
-
-//Permissions
-import { CustomPermissionsRolesPlugin } from './plugins/custom-permissions-roles';
-import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins'
-
-
-import { defaultEmailHandlers, EmailPlugin, FileBasedTemplateLoader } from '@vendure/email-plugin';
+import { ElasticsearchPlugin } from '@vendure/elasticsearch-plugin';
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
+import { EmailPlugin, defaultEmailHandlers, FileBasedTemplateLoader } from '@vendure/email-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
 import { ThemePlugin } from './plugins/theme/login/login-plugin';
-
+import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
+import { CustomPermissionsRolesPlugin } from './plugins/custom-permissions-roles';
+import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins';
+import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin';
+import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
 import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billing.plugin';
 import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
-
-import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
-import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin';
-
 import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
 import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
 import { SupplierOwnershipPlugin } from './plugins/supplier/ownership/ownership.plugin';
-
-import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
-
-import 'dotenv/config';
-import path from 'path';
 import { GlobalLoadingScreenPlugin } from './plugins/global-loading-screen/global-loading-screen.plugin';
 import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
 import { GlobalVariantConfigurationPlugin } from './plugins/global-variant-configuration/global-variant-configuration.plugin';
 import { TenantPlugin } from './plugins/tenant/tenant.plugin';
 import { CmsPlugin } from './plugins/cms/cms.plugin';
+import 'dotenv/config';
+import path from 'path';
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
 
 export const config: VendureConfig = {
-    //Sync Catalog Prices Across All
     catalogOptions: {
         productVariantPriceUpdateStrategy: new DefaultProductVariantPriceUpdateStrategy({
             syncPricesAcrossChannels: true,
@@ -58,11 +47,7 @@ export const config: VendureConfig = {
                 public: true,
                 nullable: true,
                 label: [{ languageCode: LanguageCode.en, value: 'Base Price (Commission)' }],
-
-                // ADD THIS SECTION:
-                ui: {
-                    component: 'currency-form-input',
-                },
+                ui: { component: 'currency-form-input' },
             },
         ],
     },
@@ -71,10 +56,7 @@ export const config: VendureConfig = {
         adminApiPath: 'admin-api',
         shopApiPath: 'shop-api',
         trustProxy: IS_DEV ? false : 1,
-        ...(IS_DEV ? {
-            adminApiDebug: true,
-            shopApiDebug: true,
-        } : {}),
+        ...(IS_DEV ? { adminApiDebug: true, shopApiDebug: true } : {}),
     },
     authOptions: {
         tokenMethod: ['bearer', 'cookie'],
@@ -82,22 +64,9 @@ export const config: VendureConfig = {
             identifier: process.env.SUPERADMIN_USERNAME,
             password: process.env.SUPERADMIN_PASSWORD,
         },
-        cookieOptions: {
-            secret: process.env.COOKIE_SECRET,
-        },
+        cookieOptions: { secret: process.env.COOKIE_SECRET },
         requireVerification: false
     },
-    // dbConnectionOptions: {
-    //     type: 'postgres',
-    //     url: process.env.DATABASE_URL,
-    //     ssl: {
-    //         rejectUnauthorized: false,
-    //     },
-    //     synchronize: false,
-    //     migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
-    //     logging: ['query', 'error'],
-    //     schema: process.env.DB_SCHEMA || 'public',
-    // },
     dbConnectionOptions: {
         type: 'postgres',
         host: process.env.DB_HOST || 'localhost',
@@ -109,7 +78,6 @@ export const config: VendureConfig = {
         synchronize: false,
         migrations: [path.join(__dirname, './migrations/*.+(js|ts)')],
         logging: ['query', 'error'],
-        // Local Postgres usually doesn’t need SSL
         ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     },
     paymentOptions: {
@@ -126,7 +94,15 @@ export const config: VendureConfig = {
         }),
         DefaultSchedulerPlugin.init(),
         DefaultJobQueuePlugin.init({ useDatabaseForBuffer: true }),
-        DefaultSearchPlugin.init({ bufferUpdates: false, indexStockStatus: true }),
+        
+        // --- FIXED ELASTICSEARCH CONFIG ---
+        ElasticsearchPlugin.init({
+            host: 'http://localhost',
+            port: 9200,
+            // Removed 'searchConfig' with invalid options. 
+            // Elastic defaults are usually sufficient for standard facet usage.
+        }),
+
         EmailPlugin.init({
             devMode: true,
             outputPath: path.join(__dirname, '../static/email/test-emails'),
@@ -142,9 +118,7 @@ export const config: VendureConfig = {
         }),
         DashboardPlugin.init({
             route: 'dashboard',
-            appDir: IS_DEV
-                ? path.join(__dirname, '../dist/dashboard')
-                : path.join(__dirname, 'dashboard'),
+            appDir: IS_DEV ? path.join(__dirname, '../dist/dashboard') : path.join(__dirname, 'dashboard'),
         }),
         CustomPermissionsRolesPlugin,
         CustomPermissionsChannelsPlugin.init({}),
