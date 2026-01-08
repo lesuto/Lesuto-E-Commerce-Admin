@@ -37,24 +37,21 @@ export class MarketplaceService {
         });
     }
 
-    /**
-     * Helper to apply common filters (Channel, Deleted, Search, Facets)
-     * Uses specific aliases to avoid collisions.
-     */
+    // --- HELPER: Apply Filters ---
     private applyFilters(
         qb: SelectQueryBuilder<Product>, 
         ctx: RequestContext, 
         supplierChannelId: ID, 
-        facetValueIds?: string[], 
+        collectionId?: ID, 
         term?: string
     ) {
-        // 1. Filter by Supplier Channel
+        // 1. Filter by Supplier
         qb.innerJoin('product.channels', 'channel', 'channel.id = :channelId', { channelId: supplierChannelId });
         
-        // 2. Filter out deleted items
+        // 2. Filter out deleted
         qb.andWhere('product.deletedAt IS NULL');
 
-        // 3. Search Term (Join Translations)
+        // 3. Search Term
         if (term && term.trim().length > 0) {
             qb.innerJoin('product.translations', 'search_trans');
             qb.andWhere(new Brackets(subQb => {
@@ -63,104 +60,113 @@ export class MarketplaceService {
             }));
         }
 
-        // 4. Facet Filter (Restrict results to selected facets)
-        if (facetValueIds && facetValueIds.length > 0) {
-            qb.innerJoin('product.facetValues', 'filter_fv');
-            qb.andWhere('filter_fv.id IN (:...facetIds)', { facetIds: facetValueIds });
+        // 4. Collection Filter (FIXED: Go through Variants)
+        if (collectionId) {
+            // Join variants first
+            qb.innerJoin('product.variants', 'filter_variant');
+            // Then join collections from the variant
+            qb.innerJoin('filter_variant.collections', 'filter_col');
+            qb.andWhere('filter_col.id = :colId', { colId: collectionId });
         }
         
         return qb;
     }
 
-    /**
-     * MAIN QUERY: Get Products + Sidebar Counts
-     */
+    // --- MAIN QUERY ---
     async getSupplierProducts(
         ctx: RequestContext, 
         supplierChannelId: ID, 
         options?: ProductListOptions,
-        facetValueIds?: string[],
+        collectionId?: ID,
         term?: string
     ) {
         const productRepo = this.connection.getRepository(ctx, Product);
 
-        // --- PART 1: GET THE PRODUCT LIST ---
+        // A. GET PRODUCTS
         const qb = productRepo.createQueryBuilder('product');
-        
-        this.applyFilters(qb, ctx, supplierChannelId, facetValueIds, term);
+        this.applyFilters(qb, ctx, supplierChannelId, collectionId, term);
 
-        // Deduplicate Parents
         qb.select('product.id', 'id');
-        qb.addSelect('product.createdAt', 'createdAt'); // Required for sorting
+        qb.addSelect('product.createdAt', 'createdAt');
         qb.distinct(true);
         qb.orderBy('product.createdAt', 'DESC');
 
-        // Pagination
         const totalItems = await qb.getCount();
         const skip = options?.skip || 0;
         const take = options?.take || 25;
         qb.offset(skip).limit(take);
 
-        // Fetch IDs
         const rawResults = await qb.getRawMany();
         const pageIds = rawResults.map(r => r.id);
 
-        // Hydrate Data
         let items: Product[] = [];
         if (pageIds.length > 0) {
             const hydratedItems = await productRepo.find({
                 where: { id: In(pageIds) },
-                relations: ['featuredAsset', 'channels', 'customFields', 'facetValues']
+                relations: [
+                    'featuredAsset', 
+                    'channels', 
+                    'customFields', 
+                    'variants' 
+                ]
             });
             
-            // Restore Sort Order
             items = pageIds
                 .map(id => hydratedItems.find(p => p.id === id))
                 .filter(item => item !== undefined) as Product[];
         }
 
-        // --- PART 2: GET FACET COUNTS (Sidebar) ---
-        // We start a fresh query builder for the aggregations
-        const facetQb = productRepo.createQueryBuilder('product');
-        
-        // 1. Re-apply the same filters (Search term, Channel, etc)
-        // Note: We intentionally do NOT apply the 'facetValueIds' filter here if we want to see 
-        // OTHER available facets. However, standard drill-down usually implies we DO filter.
-        // For now, we apply exactly what the user selected to show remaining available options.
-        this.applyFilters(facetQb, ctx, supplierChannelId, facetValueIds, term);
+        // B. GET COLLECTION COUNTS (Sidebar)
+        const colQb = productRepo.createQueryBuilder('product');
+        this.applyFilters(colQb, ctx, supplierChannelId, undefined, term); 
 
-        // 2. Join FacetValues to count them
-        facetQb.innerJoin('product.facetValues', 'count_fv');
+        // FIXED: Join Variants -> Collections
+        colQb.innerJoin('product.variants', 'count_variant');
+        colQb.innerJoin('count_variant.collections', 'count_col');
         
-        // 3. Join Translations to get the Facet Name (FIXED)
-        facetQb.innerJoin('count_fv.translations', 'count_fv_trans');
-        facetQb.andWhere('count_fv_trans.languageCode = :lang', { lang: ctx.languageCode });
+        colQb.innerJoin('count_col.translations', 'count_col_trans');
+        colQb.andWhere('count_col_trans.languageCode = :lang', { lang: ctx.languageCode });
 
-        // 4. Select & Group
-        facetQb.select('count_fv.id', 'id');
-        facetQb.addSelect('count_fv_trans.name', 'name');
-        facetQb.addSelect('COUNT(DISTINCT product.id)', 'count'); // Count unique products
+        colQb.select('count_col.id', 'id');
+        colQb.addSelect('count_col_trans.name', 'name');
+        colQb.addSelect('COUNT(DISTINCT product.id)', 'count'); // Count Unique Parents
         
-        facetQb.groupBy('count_fv.id');
-        facetQb.addGroupBy('count_fv_trans.name');
+        colQb.groupBy('count_col.id');
+        colQb.addGroupBy('count_col_trans.name');
 
-        const rawFacets = await facetQb.getRawMany();
-        
-        // Map to Schema Type
-        const facets = rawFacets.map(r => ({
-            facetValue: { id: r.id, name: r.name },
+        const rawCollections = await colQb.getRawMany();
+        const collections = rawCollections.map(r => ({
+            collection: { id: r.id, name: r.name },
             count: parseInt(r.count, 10)
         }));
+
+        // C. GET STATUS COUNTS
+        const statusQb = productRepo.createQueryBuilder('product');
+        this.applyFilters(statusQb, ctx, supplierChannelId, collectionId, term);
+        
+        statusQb.leftJoin('product.channels', 'merchant_channel', 'merchant_channel.id = :merchantId', { merchantId: ctx.channelId });
+        
+        statusQb.select('COUNT(DISTINCT product.id)', 'total');
+        statusQb.addSelect('COUNT(DISTINCT merchant_channel.id)', 'inStore');
+
+        const statusResult = await statusQb.getRawOne();
+        const total = parseInt(statusResult.total, 10) || 0;
+        const inStore = parseInt(statusResult.inStore, 10) || 0;
 
         return {
             items,
             totalItems,
-            facets
+            collections,
+            counts: {
+                total,
+                inStore,
+                notInStore: total - inStore
+            }
         };
     }
 
-    // --- STANDARD HELPER METHODS (Unchanged) ---
-
+    // --- STANDARD METHODS (Unchanged) ---
+    
     async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
         const systemCtx = this.getSystemContext(ctx);
         await this.channelService.assignToChannels(systemCtx, Product, productId, [targetChannelId]);

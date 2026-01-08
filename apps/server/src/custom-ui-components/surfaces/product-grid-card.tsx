@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Plus, Trash2, CheckSquare, Square, Store } from 'lucide-react';
+import { Eye, Plus, Trash2, CheckSquare, Square, Store, AlertTriangle } from 'lucide-react';
 
 interface ProductGridCardProps {
   name: string;
@@ -9,27 +9,39 @@ interface ProductGridCardProps {
   earnings: string;
   isAdded: boolean;
   isSelected: boolean;
+  stockLevel?: number; // <--- NEW PROP
   onView: () => void;
   onSelect: (e: React.MouseEvent) => void;
-  onToggle?: (e: React.MouseEvent) => void; // Optional: If null, shows "In Catalog" message
+  onToggle?: (e: React.MouseEvent) => void;
 }
 
 export const ProductGridCard: React.FC<ProductGridCardProps> = ({
-  name, image, supplierName, retailPrice, earnings, isAdded, isSelected, onView, onSelect, onToggle,
+  name, image, supplierName, retailPrice, earnings, isAdded, isSelected, stockLevel, onView, onSelect, onToggle,
 }) => (
   <div
     onClick={onView}
     className={`
-      /* THEME: ui-surface forces inversion (Light Card in Dark Mode) */
       ui-surface group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 flex flex-col h-full shadow-sm hover:shadow-xl
       ${isSelected ? 'ring-2 ring-blue-500 border-transparent' : ''}
     `}
   >
-    {/* Image Container - ui-surface-muted makes it slightly darker than the card body */}
+    {/* Image Container */}
     <div className="aspect-square ui-surface-muted relative overflow-hidden border-b ui-divider">
+      
+      {/* STOCK BADGE (Internalized) */}
+      {stockLevel !== undefined && (
+        <div className={`absolute top-2 left-2 px-2 py-1 text-[10px] font-bold uppercase rounded-md shadow-sm z-10 
+          ${stockLevel > 0 
+            ? 'bg-white/90 text-gray-700 border border-gray-200 backdrop-blur-sm' 
+            : 'bg-red-100 text-red-700 border border-red-200'}
+        `}>
+          {stockLevel > 0 ? `${stockLevel} in stock` : 'Out of Stock'}
+        </div>
+      )}
+
       <button
         onClick={onSelect}
-        className="absolute top-2 left-2 z-20 p-1.5 ui-surface rounded-md shadow-sm transition-transform hover:scale-105"
+        className="absolute top-2 right-2 z-20 p-1.5 ui-surface rounded-md shadow-sm transition-transform hover:scale-105"
       >
         {isSelected ? <CheckSquare size={18} className="text-blue-600 dark:text-blue-500" /> : <Square size={18} className="ui-text-muted" />}
       </button>
@@ -41,7 +53,7 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
       )}
 
       {isAdded && (
-        <div className="absolute top-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wide z-10">
+        <div className="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wide z-10">
           Synced
         </div>
       )}
@@ -51,6 +63,7 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
       </div>
     </div>
 
+    {/* Details Body */}
     <div className="p-4 flex flex-col flex-1">
       <h3 className="font-bold ui-text-primary text-sm line-clamp-2 mb-1 h-10 leading-snug" title={name}>{name}</h3>
       
@@ -64,7 +77,6 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
           <span className="font-mono font-medium ui-text-primary">{retailPrice}</span>
         </div>
         
-        {/* Earnings: Always Light Green Background / Dark Green Text regardless of theme */}
         <div className="flex justify-between items-center text-xs bg-emerald-100 border border-emerald-200 px-2 py-1.5 rounded">
           <span className="text-emerald-800 uppercase font-bold tracking-wider">Earn</span>
           <span className="text-emerald-800 font-bold">{earnings}</span>

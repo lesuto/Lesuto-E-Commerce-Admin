@@ -2,13 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, Page, PageLayout, PageBlock, PageTitle } from '@vendure/dashboard';
-import { Store, Layers, Search, Trash2, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Store, Layers, Trash2, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { 
   ProductBrowseLayout, ProductToolbar, CheckboxFilterList, 
   ProductGridCard, StatusToast, PaginationToolbar, 
-  ProductDetailModal 
+  ProductDetailModal, SidebarPanel, SearchBox 
 } from '../../../../../custom-ui-components';
 
 import '../../../../../custom-ui-components/css/ui-surfaces.css';
@@ -19,7 +19,9 @@ const GET_MY_PRODUCTS_PAGINATED = graphql(`
     products(options: $options) {
       items {
         id, name, description, featuredAsset { preview }, facetValues { id name }, 
-        channels { id }, customFields { ownercompany, basePrice }, variants { price }
+        channels { id }, customFields { ownercompany, basePrice }, 
+        # UPDATED: We now fetch stockLevel to display the badge on the card
+        variants { price stockLevel }
       }
       totalItems
     }
@@ -107,6 +109,11 @@ export function InventoryComponent() {
   const getPrice = (p: any) => p.variants?.[0]?.price || 0;
   const getEarnings = (p: any) => getPrice(p) - (p.customFields?.basePrice || 0);
 
+  // Calculate Stock Sum (Sum of all variants)
+  const getStock = (p: any) => {
+      return (p.variants || []).reduce((acc: number, v: any) => acc + (v.stockLevel || 0), 0);
+  };
+
   const filters = useMemo(() => {
     const raw = filterQuery.data?.products?.items || [];
     const facets = new Map(), suppliers = new Set();
@@ -148,28 +155,32 @@ export function InventoryComponent() {
           <ProductBrowseLayout
             sidebar={
               <div className="space-y-4 w-full">
-                {/* Search */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                   <div className="relative">
-                      <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                      <input 
-                        type="text" 
-                        placeholder="Search..." 
-                        className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                {/* 1. Search Panel */}
+                <SidebarPanel title="Search">
+                    <SearchBox 
                         value={searchTerm} 
-                        onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
-                      />
-                   </div>
-                </div>
-                {/* Filters */}
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2"><Store size={14}/> Suppliers</h3>
-                    <CheckboxFilterList items={filters.suppliers} selected={selectedSuppliers} onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} />
-                </div>
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <h3 className="font-bold text-xs text-gray-500 dark:text-gray-400 uppercase mb-2 flex items-center gap-2"><Layers size={14}/> Categories</h3>
-                    <CheckboxFilterList items={filters.facets} selected={selectedFacets} onToggle={id => { setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} />
-                </div>
+                        onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} 
+                        placeholder="Search inventory..."
+                    />
+                </SidebarPanel>
+
+                {/* 2. Suppliers Panel */}
+                <SidebarPanel title="Suppliers" icon={<Store size={14}/>}>
+                    <CheckboxFilterList 
+                        items={filters.suppliers} 
+                        selected={selectedSuppliers} 
+                        onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
+                    />
+                </SidebarPanel>
+
+                {/* 3. Categories Panel */}
+                <SidebarPanel title="Categories" icon={<Layers size={14}/>}>
+                    <CheckboxFilterList 
+                        items={filters.facets} 
+                        selected={selectedFacets} 
+                        onToggle={id => { setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
+                    />
+                </SidebarPanel>
               </div>
             }
           >
@@ -201,6 +212,7 @@ export function InventoryComponent() {
                       supplierName={getSupplierName(p.customFields?.ownercompany)}
                       retailPrice={formatPrice(getPrice(p))}
                       earnings={formatPrice(getEarnings(p))}
+                      stockLevel={getStock(p)} // <--- Pass Stock Here
                       isAdded={true}
                       isSelected={selectedIds.has(p.id)}
                       onView={() => setViewProductId(p.id)} 
