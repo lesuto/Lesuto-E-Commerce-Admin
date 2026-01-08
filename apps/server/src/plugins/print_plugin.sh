@@ -16,4 +16,4 @@ print_directory_contents() {
 }
 
 # Usage: Replace with your directory path
-print_directory_contents "./cms"  # or '/marketplace' if absolute
+print_directory_contents "../custom-ui-components"  # or '/marketplace' if absolute

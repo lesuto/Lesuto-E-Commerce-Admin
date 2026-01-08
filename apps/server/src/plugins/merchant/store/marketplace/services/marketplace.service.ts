@@ -7,8 +7,10 @@ import {
     Product,
     ProductVariant,
     Channel,
-    ProductVariantService
+    ProductVariantService,
+    ListQueryBuilder
 } from '@vendure/core';
+import { ProductListOptions } from '@vendure/common/lib/generated-types';
 import { SupplierSubscription } from '../entities/supplier-subscription.entity';
 import { MarketplaceProfileView } from '../entities/marketplace-profile-view.entity';
 
@@ -17,78 +19,51 @@ export class MarketplaceService {
     constructor(
         private connection: TransactionalConnection,
         private channelService: ChannelService,
-        private productVariantService: ProductVariantService
+        private productVariantService: ProductVariantService,
+        private listQueryBuilder: ListQueryBuilder
     ) { }
 
-    /**
-     * Sudo-mode: Allows us to move the Supplier's product
-     * even though the Merchant doesn't strictly own it yet.
-     */
     private getSystemContext(ctx: RequestContext): RequestContext {
         return new RequestContext({
             apiType: 'admin',
             isAuthorized: true,
             authorizedAsOwnerOnly: false,
-            channel: ctx.channel, // Keeps the Merchant's channel active
+            channel: ctx.channel,
             languageCode: ctx.languageCode,
             session: ctx.session,
             req: ctx.req,
         });
     }
 
-async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
-    console.log("Assign Product To Channel");
+    async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
+        const systemCtx = this.getSystemContext(ctx);
+        await this.channelService.assignToChannels(systemCtx, Product, productId, [targetChannelId]);
+        
+        const product = await this.connection.getEntityOrThrow(systemCtx, Product, productId, { 
+            relations: ['variants', 'variants.productVariantPrices'] 
+        });
 
-    // 1. Switch to System Admin Context
-    const systemCtx = this.getSystemContext(ctx);
+        if (!product.variants || product.variants.length === 0) return true;
 
-    // 2. Assign the Product to the Merchant Channel
-    await this.channelService.assignToChannels(systemCtx, Product, productId, [targetChannelId]);
-    
-    // Fetch the product with its relations
-    const product = await this.connection.getEntityOrThrow(systemCtx, Product, productId, { 
-        relations: ['variants', 'variants.productVariantPrices'] 
-    });
+        const variantsToUpdate = [];
 
-    // --- SAFETY CHECK: Early exit if no variants exist ---
-    if (!product.variants || product.variants.length === 0) {
-        // No variants to process, so we are done.
+        for (const variant of product.variants) {
+            await this.channelService.assignToChannels(systemCtx, ProductVariant, variant.id, [targetChannelId]);
+            const prices = variant.productVariantPrices || [];
+            const supplierPrice = prices.find(p => p.currencyCode === ctx.channel.defaultCurrencyCode) || prices[0];
+
+            if (supplierPrice) {
+                variantsToUpdate.push({ id: variant.id, price: supplierPrice.price });
+            }
+        }
+
+        if (variantsToUpdate.length > 0) {
+            await this.productVariantService.update(systemCtx, variantsToUpdate);
+        }
+
         return true;
     }
 
-    // 3. Fix the "No Price" Error
-    const variantsToUpdate = [];
-
-    for (const variant of product.variants) {
-        // Assign the specific variant to the channel
-        await this.channelService.assignToChannels(systemCtx, ProductVariant, variant.id, [targetChannelId]);
-        
-        // Safety check: ensure prices array exists before trying to find()
-        const prices = variant.productVariantPrices || [];
-
-        // Find the price in the current currency (or fallback to the first one)
-        const supplierPrice = prices.find(p => 
-            p.currencyCode === ctx.channel.defaultCurrencyCode
-        ) || prices[0];
-
-        // Only add to update list if a valid price was found
-        if (supplierPrice) {
-            variantsToUpdate.push({
-                id: variant.id,
-                price: supplierPrice.price 
-            });
-        }
-    }
-
-    // 4. Save all prices in one go
-    if (variantsToUpdate.length > 0) {
-        await this.productVariantService.update(systemCtx, variantsToUpdate);
-    }
-
-    return true;
-}
-
-    // ... The rest of your methods (removeProduct, etc) remain the same ...
     async removeProductFromChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
         const systemCtx = this.getSystemContext(ctx);
         await this.channelService.removeFromChannels(systemCtx, Product, productId, [targetChannelId]);
@@ -153,14 +128,24 @@ async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId
         });
     }
 
-    async getSupplierProducts(ctx: RequestContext, supplierChannelId: ID) {
-        return this.connection.getRepository(ctx, Product)
-            .createQueryBuilder('product')
-            .leftJoinAndSelect('product.channels', 'channel')
-            .leftJoinAndSelect('product.featuredAsset', 'featuredAsset')
-            .leftJoinAndSelect('product.variants', 'variants')
-            .where('channel.id = :supplierId', { supplierId: supplierChannelId })
-            .andWhere('product.deletedAt IS NULL') 
-            .getMany();
+    // --- FIX IS HERE ---
+    async getSupplierProducts(ctx: RequestContext, supplierChannelId: ID, options?: ProductListOptions) {
+        return this.listQueryBuilder
+            .build(Product, options, {
+                ctx,
+                // FIX: Removed 'variants' and 'facetValues' to prevent Cartesian product (tripling rows).
+                // 'featuredAsset' is needed for the image.
+                // 'channels' is needed to check if it's already added.
+                // 'customFields' is needed for basePrice.
+                relations: ['featuredAsset', 'channels', 'customFields'], 
+                channelId: supplierChannelId,
+            })
+            .getManyAndCount()
+            .then(([items, totalItems]) => {
+                return {
+                    items,
+                    totalItems
+                };
+            });
     }
 }

@@ -22,7 +22,8 @@
     "admin-ui",
     "src/plugins/**/dashboard/*",
     "src/gql/*",
-    "vite.*.*ts"
+    "vite.*.*ts",
+    "src/custom-ui-components"   // <--- ADD THIS LINE
   ],
   "ts-node": {
     "files": true

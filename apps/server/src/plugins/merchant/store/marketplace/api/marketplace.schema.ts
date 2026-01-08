@@ -23,7 +23,11 @@ export const marketplaceSchema = gql`
     
     extend type Query {
         marketplaceSuppliers: [Channel!]!
-        supplierProducts(supplierChannelId: ID!): [Product!]!
+        
+        # --- UPDATED THIS LINE ---
+        # Changed return type to ProductList! and added options argument
+        supplierProducts(supplierChannelId: ID!, options: ProductListOptions): ProductList!
+        
         supplier(supplierChannelId: ID!): Channel
     }
 `;

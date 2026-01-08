@@ -16,6 +16,7 @@
   "include": [
     "src/plugins/**/dashboard/*",
     "src/gql/**/*.ts",
-    "vite.*.*ts"
+    "vite.*.*ts",
+    "src/custom-ui-components/**/*"
   ]
 }
