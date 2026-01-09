@@ -8,7 +8,6 @@ import {
     ProductVariant,
     Channel,
     ProductVariantService,
-    ListQueryBuilder
 } from '@vendure/core';
 import { ProductListOptions } from '@vendure/common/lib/generated-types';
 import { In, Brackets, SelectQueryBuilder } from 'typeorm'; 
@@ -22,7 +21,6 @@ export class MarketplaceService {
         private connection: TransactionalConnection,
         private channelService: ChannelService,
         private productVariantService: ProductVariantService,
-        private listQueryBuilder: ListQueryBuilder
     ) { }
 
     private getSystemContext(ctx: RequestContext): RequestContext {
@@ -37,9 +35,6 @@ export class MarketplaceService {
         });
     }
 
-    /**
-     * MASTER FILTER LOGIC
-     */
     private applyFilters(
         qb: SelectQueryBuilder<Product>, 
         ctx: RequestContext, 
@@ -51,11 +46,11 @@ export class MarketplaceService {
         status?: string,
         enabled?: boolean
     ) {
-        // 1. Supplier Filter
+        // 1. Base Scope
         qb.innerJoin('product.channels', 'channel', 'channel.id = :channelId', { channelId: supplierChannelId });
         qb.andWhere('product.deletedAt IS NULL');
 
-        // 2. Search Term
+        // 2. Search
         if (term && term.trim().length > 0) {
             qb.innerJoin('product.translations', 'search_trans');
             qb.andWhere(new Brackets(subQb => {
@@ -64,43 +59,48 @@ export class MarketplaceService {
             }));
         }
 
-        // 3. Collection Filter
+        // 3. Filters
         if (collectionId) {
             qb.innerJoin('product.variants', 'filter_variant_col');
             qb.innerJoin('filter_variant_col.collections', 'filter_col');
             qb.andWhere('filter_col.id = :colId', { colId: collectionId });
         }
 
-        // 4. Facet Filter
         if (facetValueIds && facetValueIds.length > 0) {
             qb.innerJoin('product.facetValues', 'filter_fv');
             qb.andWhere('filter_fv.id IN (:...facetIds)', { facetIds: facetValueIds });
         }
 
-        // 5. Stock Filter
+        // 4. Stock & Visibility
         if (stock === 'in-stock') {
+            qb.andWhere('product.enabled = :isEnabled', { isEnabled: true });
             qb.andWhere((qb) => {
                 const subQuery = qb.subQuery()
                     .select('1')
                     .from(ProductVariant, 'v')
+                    .leftJoin('v.stockLevels', 'sl') 
                     .where('v.productId = product.id')
-                    .andWhere('v.stock_on_hand > 0') 
+                    .andWhere('sl.stockOnHand > 0') 
                     .getQuery();
                 return `EXISTS ${subQuery}`;
             });
         } else if (stock === 'out-of-stock') {
+            qb.andWhere('product.enabled = :isEnabled', { isEnabled: true });
             qb.andWhere((qb) => {
                 const subQuery = qb.subQuery()
                     .select('1')
                     .from(ProductVariant, 'v')
+                    .leftJoin('v.stockLevels', 'sl')
                     .where('v.productId = product.id')
-                    .andWhere('v.stock_on_hand > 0')
+                    .andWhere('sl.stockOnHand > 0')
                     .getQuery();
                 return `NOT EXISTS ${subQuery}`;
             });
+        } else if (stock === 'disabled') {
+            qb.andWhere('product.enabled = :isEnabled', { isEnabled: false });
         }
 
-        // 6. Catalog Status
+        // 5. Catalog Status
         if (status === 'added') {
             qb.innerJoin('product.channels', 'merchant_channel_inc', 'merchant_channel_inc.id = :merchantId', { merchantId: ctx.channelId });
         } else if (status === 'not-added') {
@@ -116,7 +116,6 @@ export class MarketplaceService {
             qb.setParameter('merchantId', ctx.channelId);
         }
 
-        // 7. Visibility
         if (enabled !== undefined && enabled !== null) {
             qb.andWhere('product.enabled = :enabled', { enabled });
         }
@@ -124,9 +123,6 @@ export class MarketplaceService {
         return qb;
     }
 
-    /**
-     * OPTIMIZED: Fixed Parallel Execution
-     */
     async getSupplierProducts(
         ctx: RequestContext, 
         supplierChannelId: ID, 
@@ -140,102 +136,118 @@ export class MarketplaceService {
     ) {
         const productRepo = this.connection.getRepository(ctx, Product);
 
-        // --- 1. Main Product Query ---
+        // --- 1. Main Grid IDs ---
         const qb = productRepo.createQueryBuilder('product');
         this.applyFilters(qb, ctx, supplierChannelId, collectionId, facetValueIds, term, stock, status, enabled);
-
         qb.select('product.id', 'id');
         qb.addSelect('product.createdAt', 'createdAt');
-        qb.distinct(true); 
+        qb.distinct(true);
         qb.orderBy('product.createdAt', 'DESC');
-
         const skip = options?.skip || 0;
         const take = options?.take || 25;
         qb.offset(skip).limit(take);
 
-        // --- 2. Sidebar: Collections (Fixed Selection) ---
+        // --- 2. Collections ---
         const colQb = productRepo.createQueryBuilder('product');
         this.applyFilters(colQb, ctx, supplierChannelId, undefined, facetValueIds, term, stock, status, enabled);
         colQb.innerJoin('product.variants', 'count_variant');
         colQb.innerJoin('count_variant.collections', 'count_col');
         colQb.innerJoin('count_col.translations', 'count_col_trans');
         colQb.andWhere('count_col_trans.languageCode = :lang', { lang: ctx.languageCode });
-        
-        // FIXED: Explicit aliasing using standard TypeORM chain
         colQb.select('count_col.id', 'id')
              .addSelect('count_col_trans.name', 'name')
-             .addSelect('COUNT(DISTINCT product.id)', 'count')
+             .addSelect('COUNT(DISTINCT product.id)', 'count') // <--- DISTINCT Ensures Correct Count
              .groupBy('count_col.id')
              .addGroupBy('count_col_trans.name');
 
-        // --- 3. Sidebar: Facets (Fixed Selection) ---
+        // --- 3. Facets ---
         const facQb = productRepo.createQueryBuilder('product');
         this.applyFilters(facQb, ctx, supplierChannelId, collectionId, undefined, term, stock, status, enabled);
         facQb.innerJoin('product.facetValues', 'count_fv');
         facQb.innerJoin('count_fv.translations', 'count_fv_trans');
         facQb.andWhere('count_fv_trans.languageCode = :lang', { lang: ctx.languageCode });
-
-        // FIXED: Explicit aliasing
         facQb.select('count_fv.id', 'id')
              .addSelect('count_fv_trans.name', 'name')
-             .addSelect('COUNT(DISTINCT product.id)', 'count')
+             .addSelect('COUNT(DISTINCT product.id)', 'count') // <--- DISTINCT Ensures Correct Count
              .groupBy('count_fv.id')
              .addGroupBy('count_fv_trans.name');
 
-        // --- 4. Status Counts ---
+        // --- 4. Global Counts (Status, Active, Disabled) ---
         const statusQb = productRepo.createQueryBuilder('product');
         statusQb.innerJoin('product.channels', 'channel', 'channel.id = :channelId', { channelId: supplierChannelId });
         statusQb.andWhere('product.deletedAt IS NULL');
         statusQb.leftJoin('product.channels', 'mc', 'mc.id = :mid', { mid: ctx.channelId });
+        
+        // !!! IMPORTANT: The DISTINCT here is what fixes the "4 Active" vs "1 Total" bug
         statusQb.select('COUNT(DISTINCT product.id)', 'total')
-                .addSelect('COUNT(DISTINCT mc.id)', 'inStore');
+                .addSelect('COUNT(DISTINCT mc.id)', 'inStore')
+                .addSelect('COUNT(DISTINCT CASE WHEN product.enabled = true THEN product.id END)', 'active')
+                .addSelect('COUNT(DISTINCT CASE WHEN product.enabled = false THEN product.id END)', 'disabled');
 
-        // 
-        // --- EXECUTE EVERYTHING IN PARALLEL ---
-        const [rawResults, totalItems, rawCols, rawFacets, statusRes] = await Promise.all([
-            qb.getRawMany(),      // 1a. IDs
-            qb.getCount(),        // 1b. Total
-            colQb.getRawMany(),   // 2. Collections
-            facQb.getRawMany(),   // 3. Facets
-            statusQb.getRawOne()  // 4. Status
+        // --- 5. In Stock Count ---
+        const stockCountQb = productRepo.createQueryBuilder('product');
+        this.applyFilters(stockCountQb, ctx, supplierChannelId, collectionId, facetValueIds, term, undefined, status, enabled);
+        stockCountQb.andWhere('product.enabled = :isEnabled', { isEnabled: true });
+        stockCountQb.andWhere((qb) => {
+             const subQuery = qb.subQuery()
+                 .select('1')
+                 .from(ProductVariant, 'v')
+                 .leftJoin('v.stockLevels', 'sl') 
+                 .where('v.productId = product.id')
+                 .andWhere('sl.stockOnHand > 0') 
+                 .getQuery();
+             return `EXISTS ${subQuery}`;
+        });
+
+        // --- EXECUTE ---
+        const [rawResults, totalItems, rawCols, rawFacets, statusRes, inStockCount] = await Promise.all([
+            qb.getRawMany(),
+            qb.getCount(),
+            colQb.getRawMany(),
+            facQb.getRawMany(),
+            statusQb.getRawOne(),
+            stockCountQb.getCount()
         ]);
 
-        // --- 5. Hydrate Visible Items ---
-        const pageIds = rawResults.map(r => r.id);
+        // --- HYDRATE ---
+        const pageIds = rawResults.map((r: any) => r.id);
         let items: Product[] = [];
-        
         if (pageIds.length > 0) {
             const hydratedItems = await productRepo.find({
                 where: { id: In(pageIds) },
-                relations: ['featuredAsset', 'channels', 'customFields', 'variants']
+                relations: ['featuredAsset', 'channels', 'customFields', 'variants', 'variants.stockLevels']
             });
-            items = pageIds.map(id => hydratedItems.find(p => p.id === id)).filter(x => x) as Product[];
+            items = pageIds.map((id: any) => hydratedItems.find(p => p.id === id)).filter((x: any) => x) as Product[];
         }
 
-        // --- 6. Map Results ---
-        // The keys 'id' and 'name' match the aliases we set in select()
-        const collections = rawCols.map(r => ({ 
-            collection: { id: r.id, name: r.name }, 
-            count: +r.count 
-        }));
-
-        const facets = rawFacets.map(r => ({ 
-            facetValue: { id: r.id, name: r.name }, 
-            count: +r.count 
-        }));
-
+        const collections = rawCols.map((r: any) => ({ collection: { id: r.id, name: r.name }, count: +r.count }));
+        const facets = rawFacets.map((r: any) => ({ facetValue: { id: r.id, name: r.name }, count: +r.count }));
+        
         const total = +statusRes?.total || 0;
         const inStore = +statusRes?.inStore || 0;
+        const active = +statusRes?.active || 0;
+        const disabled = +statusRes?.disabled || 0;
+        const inStock = inStockCount;
+        const outOfStock = Math.max(0, active - inStock);
 
         return { 
             items, 
             totalItems, 
             collections, 
             facets, 
-            counts: { total, inStore, notInStore: total - inStore } 
+            counts: { 
+                total, 
+                inStore, 
+                notInStore: total - inStore,
+                active,
+                disabled,
+                inStock,
+                outOfStock
+            } 
         };
     }
 
+    // ... (Helpers: getMarketplaceSuppliers, assignProductToChannel, etc. unchanged)
     async getMarketplaceSuppliers(ctx: RequestContext) {
         return this.connection.getRepository(ctx, Channel)
             .createQueryBuilder('channel')
@@ -245,8 +257,6 @@ export class MarketplaceService {
             .getMany();
     }
 
-    // ... (Keep remaining methods: assignProductToChannel, etc. unchanged)
-    
     async assignProductToChannel(ctx: RequestContext, productId: ID, targetChannelId: ID) {
         const systemCtx = this.getSystemContext(ctx);
         await this.channelService.assignToChannels(systemCtx, Product, productId, [targetChannelId]);

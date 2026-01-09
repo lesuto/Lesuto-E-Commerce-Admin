@@ -24,6 +24,10 @@ export const marketplaceSchema = gql`
         total: Int!
         inStore: Int!
         notInStore: Int!
+        active: Int
+        disabled: Int
+        inStock: Int
+        outOfStock: Int
     }
 
     type SupplierProductList {
@@ -52,11 +56,11 @@ export const marketplaceSchema = gql`
             supplierChannelId: ID!, 
             options: ProductListOptions,
             collectionId: ID,
-            facetValueIds: [ID!],    # Restored for "Filters"
+            facetValueIds: [ID!],
             term: String,
-            stock: String,           # 'in-stock', 'out-of-stock', 'all'
-            status: String,          # 'added', 'not-added', 'all'
-            enabled: Boolean         # true, false, or null (all)
+            stock: String,
+            status: String,
+            enabled: Boolean
         ): SupplierProductList!
         
         supplier(supplierChannelId: ID!): Channel

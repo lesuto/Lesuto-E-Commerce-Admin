@@ -18,8 +18,8 @@
     }
   },
   "include": [
-    "src/**/*.ts",              // your normal server TS files
-    "src/lesuto-ui/**/*.ts"     // explicitly include the UI files
+    "src/**/*.ts",
+    "src/lesuto-ui/**/*.ts"
   ],
   "exclude": [
     "node_modules",
