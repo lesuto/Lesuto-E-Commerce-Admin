@@ -17,6 +17,6 @@
     "src/plugins/**/dashboard/*",
     "src/gql/**/*.ts",
     "vite.*.*ts",
-    "src/custom-ui-components/**/*"
+    "src/lesuto-ui/**/*"
   ]
 }

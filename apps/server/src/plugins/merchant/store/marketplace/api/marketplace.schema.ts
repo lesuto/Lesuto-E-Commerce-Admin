@@ -10,9 +10,13 @@ export const marketplaceSchema = gql`
         logo: Asset
     }
 
-    # --- NEW TYPES ---
     type CollectionCount {
         collection: Collection!
+        count: Int!
+    }
+
+    type FacetCount {
+        facetValue: FacetValue!
         count: Int!
     }
 
@@ -25,12 +29,10 @@ export const marketplaceSchema = gql`
     type SupplierProductList {
         items: [Product!]!
         totalItems: Int!
-        # Replaces 'facets'
-        collections: [CollectionCount!]! 
-        # New Status Counts
+        collections: [CollectionCount!]!
+        facets: [FacetCount!]!
         counts: ProductStatusCounts!
     }
-    # -----------------
 
     extend type Channel {
         isSubscription: Boolean
@@ -46,13 +48,16 @@ export const marketplaceSchema = gql`
     extend type Query {
         marketplaceSuppliers: [Channel!]!
         
-        # Updated Query Signature
         supplierProducts(
             supplierChannelId: ID!, 
             options: ProductListOptions,
-            collectionId: ID,    # <--- New Argument
-            term: String
-        ): SupplierProductList!  # <--- New Return Type
+            collectionId: ID,
+            facetValueIds: [ID!],    # Restored for "Filters"
+            term: String,
+            stock: String,           # 'in-stock', 'out-of-stock', 'all'
+            status: String,          # 'added', 'not-added', 'all'
+            enabled: Boolean         # true, false, or null (all)
+        ): SupplierProductList!
         
         supplier(supplierChannelId: ID!): Channel
     }

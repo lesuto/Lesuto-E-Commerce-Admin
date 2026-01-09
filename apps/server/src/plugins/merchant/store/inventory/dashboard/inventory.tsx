@@ -6,22 +6,28 @@ import { Store, Layers, Trash2, Loader, AlertTriangle, RefreshCw } from 'lucide-
 import { useDebounce } from 'use-debounce';
 
 import { 
-  ProductBrowseLayout, ProductToolbar, CheckboxFilterList, 
-  ProductGridCard, StatusToast, PaginationToolbar, 
-  ProductDetailModal, SidebarPanel, SearchBox 
-} from '../../../../../custom-ui-components';
+  ProductBrowseLayout, 
+  ProductToolbar, 
+  CheckboxFilterList, 
+  ProductGridCard, 
+  ProductGridTable, 
+  StatusToast, 
+  PaginationToolbar, 
+  ProductDetailModal, 
+  SidebarPanel, 
+  SearchBox 
+} from '@lesuto/ui';
 
-import '../../../../../custom-ui-components/css/ui-surfaces.css';
+import '@lesuto/ui/css/ui-surfaces.css';
 
-// --- QUERIES ---
+// --- QUERIES (Unchanged) ---
 const GET_MY_PRODUCTS_PAGINATED = graphql(`
   query GetMyProductsPaginated($options: ProductListOptions) {
     products(options: $options) {
       items {
         id, name, description, featuredAsset { preview }, facetValues { id name }, 
         channels { id }, customFields { ownercompany, basePrice }, 
-        # UPDATED: We now fetch stockLevel to display the badge on the card
-        variants { price stockLevel }
+        variants { price stockOnHand sku }
       }
       totalItems
     }
@@ -35,7 +41,7 @@ const GET_PRODUCT_DETAIL = graphql(`
       featuredAsset { preview }
       customFields { basePrice ownercompany }
       variants {
-        id name sku price stockLevel
+        id name sku price stockOnHand
         options { code name }
       }
     }
@@ -58,7 +64,7 @@ export function InventoryComponent() {
   const [selectedFacets, setSelectedFacets] = useState<Set<string>>(new Set());
   const [selectedSuppliers, setSelectedSuppliers] = useState<Set<string>>(new Set());
 
-  // --- Main Query ---
+  // --- Queries ---
   const productsQuery = useQuery({
     queryKey: ['myProducts', currentPage, pageSize, debouncedSearch],
     queryFn: () => api.query(GET_MY_PRODUCTS_PAGINATED, {
@@ -108,11 +114,7 @@ export function InventoryComponent() {
   const formatPrice = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val / 100);
   const getPrice = (p: any) => p.variants?.[0]?.price || 0;
   const getEarnings = (p: any) => getPrice(p) - (p.customFields?.basePrice || 0);
-
-  // Calculate Stock Sum (Sum of all variants)
-  const getStock = (p: any) => {
-      return (p.variants || []).reduce((acc: number, v: any) => acc + (v.stockLevel || 0), 0);
-  };
+  const getStock = (p: any) => (p.variants || []).reduce((acc: number, v: any) => acc + (v.stockOnHand || 0), 0);
 
   const filters = useMemo(() => {
     const raw = filterQuery.data?.products?.items || [];
@@ -138,7 +140,7 @@ export function InventoryComponent() {
     setTimeout(() => setStatusMessage(null), 2000);
   };
 
-  // --- Client Side Filtering ---
+  // Client Side Filtering
   const filteredDisplayItems = useMemo(() => {
     return dedupedItems.filter(p => {
         const matchSupplier = selectedSuppliers.size === 0 || selectedSuppliers.has(p.customFields?.ownercompany || 'Unknown');
@@ -146,6 +148,12 @@ export function InventoryComponent() {
         return matchSupplier && matchFacet;
     });
   }, [dedupedItems, selectedSuppliers, selectedFacets]);
+
+  // Toggle All Helper for Table
+  const handleToggleAll = () => {
+    if (selectedIds.size === filteredDisplayItems.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredDisplayItems.map(p => p.id)));
+  };
 
   return (
     <Page pageId="merchant-inventory">
@@ -155,26 +163,21 @@ export function InventoryComponent() {
           <ProductBrowseLayout
             sidebar={
               <div className="space-y-4 w-full">
-                {/* 1. Search Panel */}
-                <SidebarPanel title="Search">
+                <SidebarPanel title="Search" variant='inverse'>
                     <SearchBox 
                         value={searchTerm} 
                         onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} 
                         placeholder="Search inventory..."
                     />
                 </SidebarPanel>
-
-                {/* 2. Suppliers Panel */}
-                <SidebarPanel title="Suppliers" icon={<Store size={14}/>}>
+                <SidebarPanel title="Suppliers" icon={<Store size={14}/>} variant='inverse'>
                     <CheckboxFilterList 
                         items={filters.suppliers} 
                         selected={selectedSuppliers} 
                         onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
                     />
                 </SidebarPanel>
-
-                {/* 3. Categories Panel */}
-                <SidebarPanel title="Categories" icon={<Layers size={14}/>}>
+                <SidebarPanel title="Categories" icon={<Layers size={14}/>} variant='inverse'>
                     <CheckboxFilterList 
                         items={filters.facets} 
                         selected={selectedFacets} 
@@ -184,9 +187,8 @@ export function InventoryComponent() {
               </div>
             }
           >
-            <ProductToolbar count={totalItems} selectedCount={selectedIds.size} bulkRemoveCount={selectedIds.size} onBulkRemove={handleBulkRemove} viewMode={viewMode} setViewMode={setViewMode} />
+            <ProductToolbar variant='inverse' count={totalItems} selectedCount={selectedIds.size} bulkRemoveCount={selectedIds.size} onBulkRemove={handleBulkRemove} viewMode={viewMode} setViewMode={setViewMode} />
 
-            {/* --- ERROR STATE --- */}
             {productsQuery.isError ? (
               <div className="p-8 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 text-center">
                 <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
@@ -203,30 +205,46 @@ export function InventoryComponent() {
                 <Loader className="animate-spin inline text-blue-600 w-8 h-8" />
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                 {filteredDisplayItems.map((p: any) => (
-                    <ProductGridCard
-                      key={p.id}
-                      name={p.name}
-                      image={p.featuredAsset?.preview}
-                      supplierName={getSupplierName(p.customFields?.ownercompany)}
-                      retailPrice={formatPrice(getPrice(p))}
-                      earnings={formatPrice(getEarnings(p))}
-                      stockLevel={getStock(p)} // <--- Pass Stock Here
-                      isAdded={true}
-                      isSelected={selectedIds.has(p.id)}
-                      onView={() => setViewProductId(p.id)} 
-                      onSelect={() => toggleSelection(p.id)}
-                      onToggle={() => { if(confirm('Remove?')) removeProduct({ productId: p.id }) }}
-                    />
-                 ))}
-                 {filteredDisplayItems.length === 0 && <div className="col-span-full py-12 text-center text-gray-400">No products match your filters.</div>}
-              </div>
+              /* --- VIEW TOGGLE LOGIC --- */
+              <>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                     {filteredDisplayItems.map((p: any) => (
+                        <ProductGridCard
+                          key={p.id}
+                          name={p.name}
+                          image={p.featuredAsset?.preview}
+                          supplierName={getSupplierName(p.customFields?.ownercompany)}
+                          retailPrice={formatPrice(getPrice(p))}
+                          earnings={formatPrice(getEarnings(p))}
+                          stockLevel={getStock(p)} 
+                          isAdded={true}
+                          isSelected={selectedIds.has(p.id)}
+                          onView={() => setViewProductId(p.id)} 
+                          onSelect={() => toggleSelection(p.id)}
+                          onToggle={() => { if(confirm('Remove?')) removeProduct({ productId: p.id }) }}
+                        />
+                     ))}
+                  </div>
+                ) : (
+                  <ProductGridTable
+                    products={filteredDisplayItems}
+                    selectedIds={selectedIds}
+                    onToggleSelection={toggleSelection}
+                    onToggleAll={handleToggleAll}
+                    onViewDetails={(id) => setViewProductId(id)}
+                    isAddedPredicate={() => true} // Always true in inventory
+                    onPrimaryAction={(p) => { if(confirm('Remove from inventory?')) removeProduct({ productId: p.id }) }}
+                    getSupplierName={getSupplierName}
+                    variant='inverse'
+                  />
+                )}
+                {filteredDisplayItems.length === 0 && <div className="py-12 text-center text-gray-400">No products match your filters.</div>}
+              </>
             )}
 
             <PaginationToolbar currentPage={currentPage} totalItems={totalItems} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
             
-            {/* --- REUSABLE PRODUCT DETAIL MODAL --- */}
             <ProductDetailModal
                 isOpen={!!viewProductId}
                 onClose={() => setViewProductId(null)}

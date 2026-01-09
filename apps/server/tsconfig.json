@@ -12,9 +12,15 @@
     "sourceMap": false,
     "skipLibCheck": true,
     "outDir": "./dist",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "paths": {
+      "@lesuto/ui": ["src/lesuto-ui"]
+    }
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts",              // your normal server TS files
+    "src/lesuto-ui/**/*.ts"     // explicitly include the UI files
+  ],
   "exclude": [
     "node_modules",
     "migration.ts",
@@ -22,13 +28,12 @@
     "admin-ui",
     "src/plugins/**/dashboard/*",
     "src/gql/*",
-    "vite.*.*ts",
-    "src/custom-ui-components"   // <--- ADD THIS LINE
+    "vite.*.*ts"
   ],
   "ts-node": {
     "files": true
   },
-  "references": [{
-    "path": "./tsconfig.dashboard.json"
-  }]
+  "references": [
+    { "path": "./tsconfig.dashboard.json" }
+  ]
 }

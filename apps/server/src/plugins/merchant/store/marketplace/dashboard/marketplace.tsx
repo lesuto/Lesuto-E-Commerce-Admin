@@ -4,7 +4,7 @@ import { loadErrorMessages, loadDevMessages } from "@apollo/client/dev";
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, Page, PageTitle, PageLayout, PageBlock } from '@vendure/dashboard';
-import { CategoryCard, StatusToast } from '../../../../../custom-ui-components';
+import { CategoryCard, StatusToast } from '@lesuto/ui';
 
 const GET_MARKETPLACE_SUPPLIERS = graphql(`
     query GetMarketplaceSuppliers {

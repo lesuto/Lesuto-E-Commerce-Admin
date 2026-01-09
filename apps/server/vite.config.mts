@@ -59,6 +59,7 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
+            '@lesuto/ui': resolve(__dirname, './src/lesuto-ui'),
             '@/gql': resolve(__dirname, './src/gql/graphql.ts'),
             '@plugins': resolve(__dirname, './src/plugins'),
         },

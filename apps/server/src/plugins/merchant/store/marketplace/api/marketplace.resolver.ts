@@ -20,20 +20,25 @@ export class MarketplaceResolver {
         return this.marketplaceService.getSupplierChannel(ctx, id);
     }
 
-    // --- UPDATED RESOLVER ---
     @Query()
     @Allow(Permission.ReadChannel)
     async supplierProducts(
         @Ctx() ctx: RequestContext, 
         @Args('supplierChannelId') id: string,
         @Args('options') options?: ProductListOptions,
-        @Args('collectionId') collectionId?: string, // <--- Accept the ID
-        @Args('term') term?: string
+        @Args('collectionId') collectionId?: string,
+        @Args('facetValueIds') facetValueIds?: string[],
+        @Args('term') term?: string,
+        @Args('stock') stock?: string,
+        @Args('status') status?: string,
+        @Args('enabled') enabled?: boolean
     ) {
-        // Pass to service
-        return this.marketplaceService.getSupplierProducts(ctx, id, options, collectionId, term);
+        return this.marketplaceService.getSupplierProducts(
+            ctx, id, options, collectionId, facetValueIds, term, stock, status, enabled
+        );
     }
 
+    // ... (Keep ResolveField and Mutations the same)
     @ResolveField()
     async supplierProfile(@Parent() channel: Channel, @Ctx() ctx: RequestContext) {
         return this.marketplaceService.getSupplierProfile(ctx, channel.id);
