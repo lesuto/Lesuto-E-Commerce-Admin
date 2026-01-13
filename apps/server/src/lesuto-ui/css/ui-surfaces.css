@@ -1,5 +1,20 @@
 @reference "tailwindcss";
 
+
+.VendurePage__container {
+  display: grid;
+  grid-template-columns: 250px 1fr; /* sidebar first */
+}
+
+.VendurePage__side {
+  order: 0; /* ensures side comes first */
+}
+
+.VendurePage__main {
+  order: 1;
+}
+
+
 @layer utilities {
   /* Primary inverted surface — sidebar panels, toolbars, accent headers */
   .ui-surface {

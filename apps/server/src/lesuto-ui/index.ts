@@ -15,6 +15,7 @@ export * from './product-browse/product-browse-layout';
  * ========================= */
 export * from './navigation/product-toolbar';
 export * from './navigation/product-search-toolbar';
+export * from './navigation/product-toolbar-sidebar';
 export * from './navigation/pagination-toolbar';
 
 

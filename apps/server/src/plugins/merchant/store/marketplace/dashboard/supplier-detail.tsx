@@ -3,21 +3,21 @@ import { useParams, useNavigate } from '@tanstack/react-router';
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, Page, PageLayout, PageBlock, PageTitle } from '@vendure/dashboard';
-import { 
+import {
     ArrowLeft, Layers, Archive, Package, Loader, Filter, Box
 } from 'lucide-react';
 
-import { 
-    ProductBrowseLayout, 
-    ProductToolbar, 
-    CheckboxFilterList, 
-    ProductGridCard, 
-    ProductGridTable, 
-    StatusToast, 
-    PaginationToolbar, 
-    SearchBox, 
-    ProductDetailModal, 
-    SidebarPanel 
+import {
+    ProductToolbar,
+    CheckboxFilterList,
+    ProductGridCard,
+    ProductGridTable,
+    StatusToast,
+    PaginationToolbar,
+    ProductToolbarSidebar,
+    SearchBox,
+    ProductDetailModal,
+    SidebarPanel
 } from '@lesuto/ui';
 
 // --- QUERIES ---
@@ -40,7 +40,7 @@ const GET_SUPPLIER_DETAILS = graphql(`
             }
             totalItems
             collections { count, collection { id name } }
-            facets { count, facetValue { id name } }
+            facets { count, facetValue { id name facet { name } } }
             counts { total, inStore, notInStore, active, disabled, inStock, outOfStock }
         }
         activeChannel { id } 
@@ -76,7 +76,7 @@ export function SupplierDetailComponent() {
     const [pageSize, setPageSize] = useState(25);
     const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
     const [selectedFacets, setSelectedFacets] = useState<Set<string>>(new Set());
-    
+
     // Server-Side Filters
     const [filterStatus, setFilterStatus] = useState<'all' | 'added' | 'not-added'>('all');
     const [filterStock, setFilterStock] = useState<'all' | 'in-stock' | 'out-of-stock' | 'disabled'>('all');
@@ -92,7 +92,7 @@ export function SupplierDetailComponent() {
             facetValueIds: Array.from(selectedFacets),
             status: filterStatus === 'all' ? undefined : filterStatus,
             stock: filterStock === 'all' ? undefined : filterStock,
-            enabled: undefined 
+            enabled: undefined
         }),
         enabled: !!id,
         placeholderData: (prev) => prev
@@ -104,9 +104,9 @@ export function SupplierDetailComponent() {
         enabled: !!viewProductId,
     });
 
-    const { mutate: addProduct } = useMutation({ 
-        mutationFn: ({ productId }: { productId: string }) => api.mutate(ADD_PRODUCT, { productId }), 
-        onSuccess: () => refetch() 
+    const { mutate: addProduct } = useMutation({
+        mutationFn: ({ productId }: { productId: string }) => api.mutate(ADD_PRODUCT, { productId }),
+        onSuccess: () => refetch()
     });
 
     // Data Helpers
@@ -116,9 +116,9 @@ export function SupplierDetailComponent() {
     const totalItems = (data?.supplierProducts as any)?.totalItems || 0;
     const currentChannelId = data?.activeChannel?.id;
     const commissionRate = profile?.commission || 0;
-    
-    const counts = (data?.supplierProducts as any)?.counts || { 
-        total: 0, inStore: 0, notInStore: 0, active: 0, disabled: 0, inStock: 0, outOfStock: 0 
+
+    const counts = (data?.supplierProducts as any)?.counts || {
+        total: 0, inStore: 0, notInStore: 0, active: 0, disabled: 0, inStock: 0, outOfStock: 0
     };
 
     const formatPrice = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val / 100);
@@ -132,14 +132,36 @@ export function SupplierDetailComponent() {
         id: c.collection.id, name: c.collection.name, count: c.count
     })).sort((a: any, b: any) => b.count - a.count), [data]);
 
-    const facetItems = useMemo(() => ((data?.supplierProducts as any)?.facets || []).map((f: any) => ({
-        id: f.facetValue.id, name: f.facetValue.name, count: f.count
-    })).sort((a: any, b: any) => b.count - a.count), [data]);
+    const facetGroups = useMemo(() => {
+        const rawFacets = (data?.supplierProducts as any)?.facets || [];
+        const groups: Record<string, any[]> = {};
+
+        rawFacets.forEach((f: any) => {
+            const groupName = f.facetValue.facet.name; // e.g., "Materials"
+            const item = {
+                id: f.facetValue.id,
+                name: f.facetValue.name, // e.g., "Cotton"
+                count: f.count
+            };
+
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+            }
+            groups[groupName].push(item);
+        });
+
+        // Sort items within each group by count (optional)
+        Object.keys(groups).forEach(key => {
+            groups[key].sort((a, b) => b.count - a.count);
+        });
+
+        return groups;
+    }, [data]);
 
     // Actions
     const toggleProductSingle = (p: any) => { if (!isAdded(p)) addProduct({ productId: p.id }); };
     const toggleSelection = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-    
+
     const handleBulkAdd = async () => {
         const toAdd = products.filter((p: any) => selectedIds.has(p.id) && !isAdded(p));
         if (!toAdd.length) return;
@@ -171,11 +193,11 @@ export function SupplierDetailComponent() {
             </PageTitle>
 
             <PageLayout>
+                {/* --- MAIN CONTENT BLOCK --- */}
                 <PageBlock column="main">
-                    
-                    {/* --- HEADER: PROFILE CARD --- */}
-                     <div className="mb-8 p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col md:flex-row gap-6">
-                        
+
+                    {/* 1. Header Profile Card */}
+                    <div className="mb-6 p-3 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col md:flex-row gap-6">
                         {/* Logo */}
                         <div className="w-24 h-24 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-600 shrink-0 shadow-inner">
                             {profile?.logo ? (
@@ -184,19 +206,16 @@ export function SupplierDetailComponent() {
                                 <span className="text-3xl font-bold text-gray-400">{profile?.nameCompany?.[0]}</span>
                             )}
                         </div>
-                        
-                        {/* Info Block (Grows) */}
+
+                        {/* Info Block */}
                         <div className="flex-1 flex flex-col justify-center">
                             <div className="flex justify-between items-start">
-                                {/* Title & Desc */}
                                 <div>
                                     <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight">{profile?.nameCompany}</h2>
                                     <p className="text-gray-500 dark:text-gray-400 max-w-2xl text-base leading-relaxed line-clamp-2">
                                         {profile?.aboutCompany || "No description available for this supplier."}
                                     </p>
                                 </div>
-
-                                {/* Badges (Top Right, Side-by-Side, Smaller) */}
                                 <div className="flex items-center gap-2 shrink-0 ml-4">
                                     <span className="px-3 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-800 shadow-sm">
                                         {commissionRate}% Commission
@@ -209,137 +228,145 @@ export function SupplierDetailComponent() {
                         </div>
                     </div>
 
-                    {/* --- BROWSER LAYOUT --- */}
-                    <ProductBrowseLayout
-                        sidebar={
-                            <div className="space-y-4 w-full">
-                                <SidebarPanel title="Search" variant="standard">
-                                    <SearchBox value={searchTerm} onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} placeholder=" Search products... " />
-                                </SidebarPanel>
+                    {/* 2. Product Grid/Table */}
+                    <div className="flex flex-col min-h-[600px]">
+                        <div className={`flex-1 transition-opacity duration-200 ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
+                            {products.length === 0 && (
+                                <div className="p-16 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-gray-400">
+                                    No products found.
+                                </div>
+                            )}
 
-                                <SidebarPanel title="Catalog Status" icon={<Archive size={14}/>} variant="standard">
-                                    <CheckboxFilterList 
-                                        selected={new Set([filterStatus])} onToggle={(id: any) => setFilterStatus(id)} 
-                                        items={[
-                                            { id: 'all', name: 'All Products', count: counts.total }, 
-                                            { id: 'not-added', name: 'Available', count: counts.notInStore }, 
-                                            { id: 'added', name: 'In Store', count: counts.inStore }
-                                        ]} 
-                                    />
-                                </SidebarPanel>
-
-                                <SidebarPanel title="Visibility & Stock" icon={<Box size={14}/>} variant="standard">
-                                    <CheckboxFilterList 
-                                        selected={new Set([filterStock])} onToggle={(id: any) => setFilterStock(id)} 
-                                        items={[
-                                            { id: 'all', name: 'Show All', count: counts.total }, 
-                                            { id: 'in-stock', name: 'In Stock', count: counts.inStock }, 
-                                            { id: 'out-of-stock', name: 'Out of Stock', count: counts.outOfStock },
-                                            { id: 'disabled', name: 'Disabled', count: counts.disabled }
-                                        ]} 
-                                    />
-                                </SidebarPanel>
-
-                                <SidebarPanel title="Categories" icon={<Layers size={14}/>} variant="standard">
-                                    <CheckboxFilterList items={collectionItems} selected={selectedCollection ? new Set([selectedCollection]) : new Set()} onToggle={id => setSelectedCollection(prev => prev === id ? null : id)} />
-                                </SidebarPanel>
-
-                                <SidebarPanel title="Filters" icon={<Filter size={14}/>} variant="standard">
-                                    <CheckboxFilterList items={facetItems} selected={selectedFacets} onToggle={id => setSelectedFacets(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; })} />
-                                </SidebarPanel>
-                            </div>
-                        }
-                    >
-                        {/* CONTENT AREA 
-                           Uses flex flex-col min-h-full to ensure sticky footer logic works 
-                           inside the simplified layout structure.
-                        */}
-                        <div className="flex flex-col min-h-[600px]">
-                            
-                            {/* Toolbar (Top) */}
-                            <div className="mb-6">
-                                <ProductToolbar 
-                                    count={totalItems} 
-                                    selectedCount={selectedIds.size} 
-                                    bulkAddCount={products.filter((p: any) => selectedIds.has(p.id) && !isAdded(p)).length} 
-                                    onBulkAdd={handleBulkAdd} 
-                                    viewMode={viewMode} 
-                                    setViewMode={setViewMode} 
+                            {viewMode === 'grid' ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pb-4">
+                                    {products.map((p: any) => {
+                                        const added = isAdded(p);
+                                        return (
+                                            <ProductGridCard
+                                                key={p.id}
+                                                name={p.name}
+                                                image={p.featuredAsset?.preview}
+                                                retailPrice={formatPrice(getPrice(p))}
+                                                earnings={formatPrice(getEarnings(getPrice(p)))}
+                                                stockLevel={getStock(p)}
+                                                isAdded={added}
+                                                isSelected={selectedIds.has(p.id)}
+                                                onView={() => setViewProductId(p.id)}
+                                                onSelect={() => toggleSelection(p.id)}
+                                                onToggle={!added ? () => toggleProductSingle(p) : undefined}
+                                                variant='standard'
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <ProductGridTable
+                                    products={products}
+                                    selectedIds={selectedIds}
+                                    onToggleSelection={toggleSelection}
+                                    onToggleAll={handleToggleAll}
+                                    onViewDetails={(id) => setViewProductId(id)}
+                                    isAddedPredicate={isAdded}
+                                    getEarnings={(p) => getEarnings(getPrice(p))}
+                                    onPrimaryAction={(p) => { if (!isAdded(p)) toggleProductSingle(p); }}
+                                    variant='standard'
                                 />
-                            </div>
+                            )}
+                        </div>
 
-                            {/* Grid/Table (Middle - Grows) */}
-                            <div className={`flex-1 transition-opacity duration-200 ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
-                                {products.length === 0 && (
-                                    <div className="p-16 text-center border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-900/50 text-gray-400">
-                                        No products found.
-                                    </div>
-                                )}
-                                
-                                {viewMode === 'grid' ? (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
-                                        {products.map((p: any) => {
-                                            const added = isAdded(p);
-                                            return (
-                                                <ProductGridCard
-                                                    key={p.id}
-                                                    name={p.name}
-                                                    image={p.featuredAsset?.preview}
-                                                    retailPrice={formatPrice(getPrice(p))}
-                                                    earnings={formatPrice(getEarnings(getPrice(p)))}
-                                                    stockLevel={getStock(p)}
-                                                    isAdded={added}
-                                                    isSelected={selectedIds.has(p.id)}
-                                                    onView={() => setViewProductId(p.id)}
-                                                    onSelect={() => toggleSelection(p.id)}
-                                                    onToggle={!added ? () => toggleProductSingle(p) : undefined} 
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <ProductGridTable
-                                        products={products}
-                                        selectedIds={selectedIds}
-                                        onToggleSelection={toggleSelection}
-                                        onToggleAll={handleToggleAll}
-                                        onViewDetails={(id) => setViewProductId(id)}
-                                        isAddedPredicate={isAdded}
-                                        getEarnings={(p) => getEarnings(getPrice(p))}
-                                        onPrimaryAction={(p) => { if (!isAdded(p)) toggleProductSingle(p); }}
-                                        variant='standard'
-                                    />
-                                )}
-                            </div>
+                        {/* 3. Pagination */}
+                        <div className="mt-auto pt-6 border-t border-gray-200 dark:border-gray-700">
+                            {totalItems > 0 && (
+                                <PaginationToolbar
+                                    currentPage={currentPage}
+                                    totalItems={totalItems}
+                                    pageSize={pageSize}
+                                    onPageChange={setCurrentPage}
+                                    onPageSizeChange={setPageSize}
+                                />
+                            )}
+                        </div>
+                    </div>
 
-                            {/* Pagination (Bottom - Sticky) */}
-                            <div className="mt-auto pt-6 border-t border-gray-200 dark:border-gray-700">
-                                {totalItems > 0 && (
-                                    <PaginationToolbar 
-                                        currentPage={currentPage} 
-                                        totalItems={totalItems} 
-                                        pageSize={pageSize} 
-                                        onPageChange={setCurrentPage} 
-                                        onPageSizeChange={setPageSize} 
-                                    />
-                                )}
+                    {/* Overlays */}
+                    <ProductDetailModal
+                        isOpen={!!viewProductId}
+                        onClose={() => setViewProductId(null)}
+                        isLoading={detailQuery.isLoading}
+                        product={detailedProduct}
+                        actionButton={!isDetailInStore && (
+                            <button onClick={() => { addProduct({ productId: viewProductId! }); setViewProductId(null); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm transition-colors">
+                                <Package size={16} /> Add to Store
+                            </button>
+                        )}
+                    />
+                    {statusMessage && <StatusToast message={statusMessage.msg} type={statusMessage.type} onDismiss={() => setStatusMessage(null)} />}
+                </PageBlock>
+                {/* --- SIDEBAR BLOCK --- */}
+                <PageBlock column="side">
+                    <div className="space-y-4">
+                        {/* 1. Controls Panel (Toolbar + Search) */}
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 shadow-sm space-y-2">
+                            <ProductToolbarSidebar
+                                count={totalItems}
+                                selectedCount={selectedIds.size}
+                                bulkAddCount={products.filter((p: any) => selectedIds.has(p.id) && !isAdded(p)).length}
+                                onBulkAdd={handleBulkAdd}
+                                viewMode={viewMode}
+                                setViewMode={setViewMode}
+                            />
+                            <div className="px-1 pb-1">
+                                <SearchBox value={searchTerm} onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} placeholder="Search products..." />
                             </div>
                         </div>
 
-                        {/* Overlays */}
-                        <ProductDetailModal
-                            isOpen={!!viewProductId}
-                            onClose={() => setViewProductId(null)}
-                            isLoading={detailQuery.isLoading}
-                            product={detailedProduct}
-                            actionButton={!isDetailInStore && (
-                                <button onClick={() => { addProduct({ productId: viewProductId! }); setViewProductId(null); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm transition-colors">
-                                    <Package size={16} /> Add to Store
-                                </button>
-                            )}
-                        />
-                        {statusMessage && <StatusToast message={statusMessage.msg} type={statusMessage.type} onDismiss={() => setStatusMessage(null)} />}
-                    </ProductBrowseLayout>
+                        {/* 2. Filters */}
+                        <SidebarPanel title="Catalog Status" icon={<Archive size={14} />} variant="standard">
+                            <CheckboxFilterList
+                                selected={new Set([filterStatus])} onToggle={(id: any) => setFilterStatus(id)}
+                                items={[
+                                    { id: 'all', name: 'All Products', count: counts.total },
+                                    { id: 'not-added', name: 'Available', count: counts.notInStore },
+                                    { id: 'added', name: 'In Store', count: counts.inStore }
+                                ]}
+                            />
+                        </SidebarPanel>
+
+                        <SidebarPanel title="Visibility & Stock" icon={<Box size={14} />} variant="standard">
+                            <CheckboxFilterList
+                                selected={new Set([filterStock])} onToggle={(id: any) => setFilterStock(id)}
+                                items={[
+                                    { id: 'all', name: 'Show All', count: counts.total },
+                                    { id: 'in-stock', name: 'In Stock', count: counts.inStock },
+                                    { id: 'out-of-stock', name: 'Out of Stock', count: counts.outOfStock },
+                                    { id: 'disabled', name: 'Disabled', count: counts.disabled }
+                                ]}
+                            />
+                        </SidebarPanel>
+
+                        <SidebarPanel title="Collections" icon={<Layers size={14} />} variant="standard">
+                            <CheckboxFilterList items={collectionItems} selected={selectedCollection ? new Set([selectedCollection]) : new Set()} onToggle={id => setSelectedCollection(prev => prev === id ? null : id)} />
+                        </SidebarPanel>
+
+                        {Object.entries(facetGroups).map(([groupName, items]) => (
+                            <SidebarPanel
+                                key={groupName}
+                                title={groupName} // e.g., "Materials", "Colors"
+                                icon={<Filter size={14} />}
+                                variant="standard"
+                            >
+                                <CheckboxFilterList
+                                    items={items}
+                                    selected={selectedFacets}
+                                    onToggle={id => setSelectedFacets(prev => {
+                                        const n = new Set(prev);
+                                        n.has(id) ? n.delete(id) : n.add(id);
+                                        return n;
+                                    })}
+                                />
+                            </SidebarPanel>
+                        ))}
+                    </div>
                 </PageBlock>
             </PageLayout>
         </Page>

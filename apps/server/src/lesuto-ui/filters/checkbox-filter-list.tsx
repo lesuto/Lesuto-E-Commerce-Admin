@@ -37,7 +37,7 @@ export const CheckboxFilterList: React.FC<CheckboxFilterListProps> = ({
           </div>
           <span className="truncate max-w-[140px]">{item.name}</span>
         </div>
-        <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full border border-gray-200 dark:border-gray-600">{item.count}</span>
+        <span className="">{item.count}</span>
       </div>
     ))}
     {items.length === 0 && <div className="text-xs text-gray-400 italic py-2">{emptyMessage}</div>}
