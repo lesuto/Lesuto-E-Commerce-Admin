@@ -2,12 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { graphql } from '@/gql';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, Page, PageLayout, PageBlock, PageTitle } from '@vendure/dashboard';
-import { Store, Layers, Trash2, Loader, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Store, Layers, Trash2, Loader, AlertTriangle, RefreshCw, Filter } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 import { 
-  ProductBrowseLayout, 
-  ProductToolbar, 
   CheckboxFilterList, 
   ProductGridCard, 
   ProductGridTable, 
@@ -15,20 +13,44 @@ import {
   PaginationToolbar, 
   ProductDetailModal, 
   SidebarPanel, 
-  SearchBox 
+  SearchBox,
+  ProductToolbarSidebar
 } from '@lesuto/ui';
 
-// --- QUERIES (Unchanged) ---
-const GET_MY_PRODUCTS_PAGINATED = graphql(`
-  query GetMyProductsPaginated($options: ProductListOptions) {
-    products(options: $options) {
+// --- QUERIES ---
+
+const GET_MY_INVENTORY = graphql(`
+  query GetMyInventory(
+      $options: ProductListOptions, 
+      $collectionId: ID, 
+      $facetValueIds: [ID!], 
+      $supplierCodes: [String!],
+      $term: String,
+      $stock: String
+  ) {
+    myInventory(
+        options: $options, 
+        collectionId: $collectionId, 
+        facetValueIds: $facetValueIds, 
+        supplierCodes: $supplierCodes,
+        term: $term,
+        stock: $stock
+    ) {
       items {
-        id, name, description, featuredAsset { preview }, facetValues { id name }, 
-        channels { id }, customFields { ownercompany, basePrice }, 
+        id, name, description, 
+        featuredAsset { preview }, 
+        facetValues { id name }, 
+        channels { id }, 
+        customFields { ownercompany, basePrice }, 
         variants { price stockOnHand sku }
       }
       totalItems
+      suppliers { name count }
+      facets { count facetValue { id name } }
+      collections { count collection { id name } }
     }
+    # We still fetch this to map codes (e.g., "SUP-001") to names (e.g., "Acme Corp")
+    marketplaceSuppliers { code, supplierProfile { nameCompany } }
   }
 `);
 
@@ -46,32 +68,38 @@ const GET_PRODUCT_DETAIL = graphql(`
   }
 `);
 
-const GET_FILTERS = graphql(`query GetInventoryFilters { products(options: { take: 500 }) { items { facetValues { id name }, customFields { ownercompany } } } }`);
-const REMOVE_FROM_CHANNEL = graphql(`mutation RemoveFromChannel($productId: ID!) { removeProductFromMyChannel(productId: $productId) }`);
-const GET_SUPPLIER_MAP = graphql(`query GetSupplierMap { marketplaceSuppliers { code, supplierProfile { nameCompany } } }`);
+const REMOVE_FROM_INVENTORY = graphql(`mutation RemoveFromInventory($productId: ID!) { removeProductFromInventory(productId: $productId) }`);
 
 export function InventoryComponent() {
+  // State
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<any>(null);
+  
+  // Filters & Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch] = useDebounce(searchTerm, 500);
+  
   const [selectedFacets, setSelectedFacets] = useState<Set<string>>(new Set());
   const [selectedSuppliers, setSelectedSuppliers] = useState<Set<string>>(new Set());
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
 
-  // --- Queries ---
-  const productsQuery = useQuery({
-    queryKey: ['myProducts', currentPage, pageSize, debouncedSearch],
-    queryFn: () => api.query(GET_MY_PRODUCTS_PAGINATED, {
+  // --- Main Query ---
+  const { data, refetch, isLoading, isError } = useQuery({
+    queryKey: ['myInventory', currentPage, pageSize, debouncedSearch, Array.from(selectedFacets), Array.from(selectedSuppliers), selectedCollection],
+    queryFn: () => api.query(GET_MY_INVENTORY, {
       options: {
         skip: (currentPage - 1) * pageSize,
         take: pageSize,
-        sort: { createdAt: 'DESC' },
-        filter: { name: { contains: debouncedSearch } }
-      }
+      },
+      term: debouncedSearch,
+      facetValueIds: Array.from(selectedFacets),
+      supplierCodes: Array.from(selectedSuppliers),
+      collectionId: selectedCollection,
+      stock: undefined 
     }),
     placeholderData: (prev) => prev,
   });
@@ -82,30 +110,32 @@ export function InventoryComponent() {
     enabled: !!viewProductId, 
   });
 
-  const filterQuery = useQuery({ queryKey: ['inventoryFilters'], queryFn: () => api.query(GET_FILTERS, {}), staleTime: 60000 });
-  const supplierMapQuery = useQuery({ queryKey: ['supplierMap'], queryFn: () => api.query(GET_SUPPLIER_MAP, {}), staleTime: 360000 });
-
   const { mutate: removeProduct } = useMutation({
-    mutationFn: ({ productId }: { productId: string }) => api.mutate(REMOVE_FROM_CHANNEL, { productId }),
+    mutationFn: ({ productId }: { productId: string }) => api.mutate(REMOVE_FROM_INVENTORY, { productId }),
     onSuccess: () => {
-      productsQuery.refetch();
+      refetch();
       setViewProductId(null);
       setStatusMessage({ msg: 'Product removed', type: 'success' });
+      // Logic to remove from set not strictly necessary as refetch updates list, but good UI practice
+      setSelectedIds(prev => { 
+          const next = new Set(prev);
+          // We can't easily know which ID was removed if triggered via bulk, 
+          // but if triggered singly we could. For now, rely on refetch.
+          return next; 
+      });
     },
   });
 
   // --- Helpers ---
-  const rawItems = productsQuery.data?.products?.items || [];
-  const totalItems = productsQuery.data?.products?.totalItems || 0;
-  
-  const dedupedItems = useMemo(() => {
-    return Array.from(new Map(rawItems.map(item => [item.id, item])).values());
-  }, [rawItems]);
-  
+  // Casting to 'any' to bypass TS errors until codegen runs
+  const inventoryData = (data as any)?.myInventory;
+  const products = inventoryData?.items || [];
+  const totalItems = inventoryData?.totalItems || 0;
+  const suppliersMap = (data as any)?.marketplaceSuppliers || [];
+
   const getSupplierName = (code: string) => {
-    if (!code) return '';
-    const map = supplierMapQuery.data?.marketplaceSuppliers;
-    const found = map?.find(s => s.code === code);
+    if (!code) return 'Unknown';
+    const found = suppliersMap.find((s: any) => s.code === code);
     return found?.supplierProfile?.nameCompany || code;
   };
 
@@ -114,19 +144,32 @@ export function InventoryComponent() {
   const getEarnings = (p: any) => getPrice(p) - (p.customFields?.basePrice || 0);
   const getStock = (p: any) => (p.variants || []).reduce((acc: number, v: any) => acc + (v.stockOnHand || 0), 0);
 
-  const filters = useMemo(() => {
-    const raw = filterQuery.data?.products?.items || [];
-    const facets = new Map(), suppliers = new Set();
-    raw.forEach((p: any) => {
-      p.facetValues?.forEach((f: any) => facets.set(f.id, f.name));
-      if(p.customFields?.ownercompany) suppliers.add(p.customFields.ownercompany);
-    });
-    return {
-      facets: Array.from(facets.entries()).map(([id, name]) => ({ id, name, count: 0 })),
-      suppliers: Array.from(suppliers).map((code: any) => ({ id: code, name: getSupplierName(code), count: 0 }))
-    };
-  }, [filterQuery.data, supplierMapQuery.data]);
+  // --- Filter Lists (Server-Side Aggregations) ---
+  const facetItems = useMemo(() => {
+     return (inventoryData?.facets || []).map((f: any) => ({
+         id: f.facetValue.id,
+         name: f.facetValue.name,
+         count: f.count
+     })).sort((a: any, b: any) => b.count - a.count);
+  }, [inventoryData]);
 
+  const supplierItems = useMemo(() => {
+    return (inventoryData?.suppliers || []).map((v: any) => ({
+        id: v.name, // The ID for filtering is the code (name in this specific DTO)
+        name: getSupplierName(v.name),
+        count: v.count
+    })).sort((a: any, b: any) => b.count - a.count);
+  }, [inventoryData, suppliersMap]);
+
+  const collectionItems = useMemo(() => {
+    return (inventoryData?.collections || []).map((c: any) => ({
+        id: c.collection.id,
+        name: c.collection.name,
+        count: c.count
+    })).sort((a: any, b: any) => b.count - a.count);
+  }, [inventoryData]);
+
+  // Actions
   const toggleSelection = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const handleBulkRemove = async () => {
@@ -138,128 +181,134 @@ export function InventoryComponent() {
     setTimeout(() => setStatusMessage(null), 2000);
   };
 
-  // Client Side Filtering
-  const filteredDisplayItems = useMemo(() => {
-    return dedupedItems.filter(p => {
-        const matchSupplier = selectedSuppliers.size === 0 || selectedSuppliers.has(p.customFields?.ownercompany || 'Unknown');
-        const matchFacet = selectedFacets.size === 0 || (p.facetValues || []).some((fv: any) => selectedFacets.has(fv.id));
-        return matchSupplier && matchFacet;
-    });
-  }, [dedupedItems, selectedSuppliers, selectedFacets]);
-
-  // Toggle All Helper for Table
   const handleToggleAll = () => {
-    if (selectedIds.size === filteredDisplayItems.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filteredDisplayItems.map(p => p.id)));
+    if (selectedIds.size === products.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(products.map((p: any) => p.id)));
   };
+
+  if (isLoading) return <div className="p-12 flex justify-center"><Loader className="animate-spin text-blue-600" /></div>;
 
   return (
     <Page pageId="merchant-inventory">
       <PageTitle>My Inventory</PageTitle>
+
       <PageLayout>
         <PageBlock column="main">
-          <ProductBrowseLayout
-            sidebar={
-              <div className="space-y-4 w-full">
-                <SidebarPanel title="Search" variant='inverse'>
-                    <SearchBox 
-                        value={searchTerm} 
-                        onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} 
-                        placeholder="Search inventory..."
-                    />
-                </SidebarPanel>
-                <SidebarPanel title="Suppliers" icon={<Store size={14}/>} variant='inverse'>
-                    <CheckboxFilterList 
-                        items={filters.suppliers} 
-                        selected={selectedSuppliers} 
-                        onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
-                    />
-                </SidebarPanel>
-                <SidebarPanel title="Categories" icon={<Layers size={14}/>} variant='inverse'>
-                    <CheckboxFilterList 
-                        items={filters.facets} 
-                        selected={selectedFacets} 
-                        onToggle={id => { setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
-                    />
-                </SidebarPanel>
-              </div>
-            }
-          >
-            <ProductToolbar variant='inverse' count={totalItems} selectedCount={selectedIds.size} bulkRemoveCount={selectedIds.size} onBulkRemove={handleBulkRemove} viewMode={viewMode} setViewMode={setViewMode} />
-
-            {productsQuery.isError ? (
-              <div className="p-8 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 text-center">
-                <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-                <h3 className="text-red-700 dark:text-red-400 font-bold mb-1">Unable to load inventory</h3>
-                <button 
-                  onClick={() => productsQuery.refetch()} 
-                  className="px-4 py-2 mt-4 bg-white dark:bg-red-900 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-100 rounded-lg text-sm font-bold flex items-center gap-2 mx-auto hover:shadow-sm"
-                >
-                  <RefreshCw size={14} /> Retry
-                </button>
-              </div>
-            ) : productsQuery.isLoading ? (
-              <div className="p-24 text-center">
-                <Loader className="animate-spin inline text-blue-600 w-8 h-8" />
-              </div>
-            ) : (
-              /* --- VIEW TOGGLE LOGIC --- */
-              <>
-                {viewMode === 'grid' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                     {filteredDisplayItems.map((p: any) => (
-                        <ProductGridCard
-                          key={p.id}
-                          name={p.name}
-                          image={p.featuredAsset?.preview}
-                          supplierName={getSupplierName(p.customFields?.ownercompany)}
-                          retailPrice={formatPrice(getPrice(p))}
-                          earnings={formatPrice(getEarnings(p))}
-                          stockLevel={getStock(p)} 
-                          isAdded={true}
-                          isSelected={selectedIds.has(p.id)}
-                          onView={() => setViewProductId(p.id)} 
-                          onSelect={() => toggleSelection(p.id)}
-                          onToggle={() => { if(confirm('Remove?')) removeProduct({ productId: p.id }) }}
-                        />
-                     ))}
-                  </div>
+            <div className="flex flex-col min-h-[600px]">
+                {isError ? (
+                   <div className="p-8 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 text-center">
+                     <AlertTriangle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+                     <h3 className="text-red-700 dark:text-red-400 font-bold mb-1">Unable to load inventory</h3>
+                     <button 
+                       onClick={() => refetch()} 
+                       className="px-4 py-2 mt-4 bg-white dark:bg-red-900 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-100 rounded-lg text-sm font-bold flex items-center gap-2 mx-auto hover:shadow-sm"
+                     >
+                       <RefreshCw size={14} /> Retry
+                     </button>
+                   </div>
                 ) : (
-                  <ProductGridTable
-                    products={filteredDisplayItems}
-                    selectedIds={selectedIds}
-                    onToggleSelection={toggleSelection}
-                    onToggleAll={handleToggleAll}
-                    onViewDetails={(id) => setViewProductId(id)}
-                    isAddedPredicate={() => true} // Always true in inventory
-                    onPrimaryAction={(p) => { if(confirm('Remove from inventory?')) removeProduct({ productId: p.id }) }}
-                    getSupplierName={getSupplierName}
-                    variant='inverse'
-                  />
+                    <div className="flex-1">
+                        {products.length === 0 && <div className="p-16 text-center text-gray-400">No products found.</div>}
+                        
+                        {viewMode === 'grid' ? (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pb-4">
+                                {products.map((p: any) => (
+                                    <ProductGridCard
+                                        key={p.id}
+                                        name={p.name}
+                                        image={p.featuredAsset?.preview}
+                                        retailPrice={formatPrice(getPrice(p))}
+                                        earnings={formatPrice(getEarnings(p))}
+                                        stockLevel={getStock(p)}
+                                        isAdded={true}
+                                        isSelected={selectedIds.has(p.id)}
+                                        onView={() => setViewProductId(p.id)}
+                                        onSelect={() => toggleSelection(p.id)}
+                                        onToggle={() => { if(confirm('Remove?')) removeProduct({ productId: p.id }) }}
+                                        variant='standard'
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <ProductGridTable
+                                products={products}
+                                selectedIds={selectedIds}
+                                onToggleSelection={toggleSelection}
+                                onToggleAll={handleToggleAll}
+                                onViewDetails={(id) => setViewProductId(id)}
+                                isAddedPredicate={() => true}
+                                getEarnings={(p) => getEarnings(p)}
+                                onPrimaryAction={(p) => { if(confirm('Remove from inventory?')) removeProduct({ productId: p.id }) }}
+                                variant='standard'
+                            />
+                        )}
+                    </div>
                 )}
-                {filteredDisplayItems.length === 0 && <div className="py-12 text-center text-gray-400">No products match your filters.</div>}
-              </>
-            )}
+                {totalItems > 0 && <PaginationToolbar currentPage={currentPage} totalItems={totalItems} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />}
+            </div>
 
-            <PaginationToolbar currentPage={currentPage} totalItems={totalItems} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
-            
             <ProductDetailModal
+                variant='inverse'
                 isOpen={!!viewProductId}
                 onClose={() => setViewProductId(null)}
                 isLoading={detailQuery.isLoading}
                 product={detailQuery.data?.product}
                 actionButton={
                     <button 
-                       onClick={() => { if(confirm('Remove this product?')) removeProduct({ productId: viewProductId! }) }} 
-                       className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2 font-medium shadow-sm transition-colors"
+                       onClick={() => { if(confirm('Remove this product?')) removeProduct({ productId: viewProductId! }); setViewProductId(null); }} 
+                       className="flex items-center gap-2"
                     >
-                       <Trash2 size={16} /> Remove from Inventory
+                       <Trash2 size={16} /> Remove
                     </button>
                 }
             />
-            
             {statusMessage && <StatusToast message={statusMessage.msg} type={statusMessage.type} onDismiss={() => setStatusMessage(null)} />}
-          </ProductBrowseLayout>
+        </PageBlock>
+
+        <PageBlock column="side">
+            <div className="space-y-4">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2 shadow-sm space-y-2">
+                    <ProductToolbarSidebar 
+                        count={totalItems} 
+                        selectedCount={selectedIds.size} 
+                        bulkAddCount={selectedIds.size} 
+                        onBulkAdd={handleBulkRemove}    
+                        viewMode={viewMode} 
+                        setViewMode={setViewMode} 
+                    />
+                    <div className="px-1 pb-1">
+                        <SearchBox 
+                            value={searchTerm} 
+                            onChange={(val) => { setSearchTerm(val); setCurrentPage(1); }} 
+                            placeholder="Search inventory..." 
+                        />
+                    </div>
+                </div>
+
+                <SidebarPanel title="Suppliers" icon={<Store size={14} />} variant="standard">
+                    <CheckboxFilterList 
+                        items={supplierItems} 
+                        selected={selectedSuppliers} 
+                        onToggle={id => { setSelectedSuppliers(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
+                    />
+                </SidebarPanel>
+
+                <SidebarPanel title="Collections" icon={<Layers size={14} />} variant="standard">
+                    <CheckboxFilterList 
+                        items={collectionItems} 
+                        selected={selectedCollection ? new Set([selectedCollection]) : new Set()} 
+                        onToggle={id => { setSelectedCollection(prev => prev === id ? null : id); setCurrentPage(1); }} 
+                    />
+                </SidebarPanel>
+
+                <SidebarPanel title="Categories" icon={<Filter size={14} />} variant="standard">
+                    <CheckboxFilterList 
+                        items={facetItems} 
+                        selected={selectedFacets} 
+                        onToggle={id => { setSelectedFacets(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }); setCurrentPage(1); }} 
+                    />
+                </SidebarPanel>
+            </div>
         </PageBlock>
       </PageLayout>
     </Page>

@@ -16,4 +16,4 @@ print_directory_contents() {
 }
 
 # Usage: Replace with your directory path
-print_directory_contents "./lesuto-ui"  # or '/marketplace' if absolute
+print_directory_contents "./tenant"  # or '/marketplace' if absolute

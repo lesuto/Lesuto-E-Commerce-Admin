@@ -47,17 +47,32 @@ const GET_SUPPLIER_DETAILS = graphql(`
     }
 `);
 
-const GET_PRODUCT_DETAIL = graphql(`
-  query GetSupplierProductDetail($id: ID!) {
-    product(id: $id) {
-      id, name, description, featuredAsset { preview }, 
-      channels { id }, 
-      customFields { basePrice ownercompany },
-      variants { id, name, sku, price, stockOnHand }
-      assets {id, preview}
+// --- FIX START: Correct Detail Query Definition ---
+const GET_SUPPLIER_PRODUCT_DETAIL = graphql(`
+    query GetSupplierProductDetail($supplierId: ID!, $productId: String!, $enabled: Boolean, $stock: String, $status: String) {
+        supplierProducts(
+            supplierChannelId: $supplierId, 
+            options: { filter: { id: { eq: $productId } } },
+            enabled: $enabled,
+            stock: $stock,
+            status: $status
+        ) {
+            items {
+                id, name, description, 
+                featuredAsset { preview }, 
+                assets { id, preview },
+                channels { id }, 
+                customFields { basePrice ownercompany },
+                enabled,
+                variants { 
+                    id, name, sku, price, stockOnHand,
+                    options { name }
+                }
+            }
+        }
     }
-  }
 `);
+// --- FIX END ---
 
 const ADD_PRODUCT = graphql(`mutation AddMarketplaceProduct($productId: ID!) { addMarketplaceProduct(productId: $productId) }`);
 
@@ -99,11 +114,19 @@ export function SupplierDetailComponent() {
         placeholderData: (prev) => prev
     });
 
+    // --- FIX START: Detail Query Hook ---
     const detailQuery = useQuery({
-        queryKey: ['supplierProductDetail', viewProductId],
-        queryFn: () => api.query(GET_PRODUCT_DETAIL, { id: viewProductId! }),
-        enabled: !!viewProductId,
+        queryKey: ['supplierProductDetail', id, viewProductId],
+        queryFn: () => api.query(GET_SUPPLIER_PRODUCT_DETAIL, { 
+            supplierId: id!, 
+            productId: viewProductId!, 
+            enabled: true,    // Only show enabled items
+            stock: 'all',     // Show even if out of stock
+            status: undefined 
+        }),
+        enabled: !!id && !!viewProductId,
     });
+    // --- FIX END ---
 
     const { mutate: addProduct } = useMutation({
         mutationFn: ({ productId }: { productId: string }) => api.mutate(ADD_PRODUCT, { productId }),
@@ -179,8 +202,10 @@ export function SupplierDetailComponent() {
         else setSelectedIds(new Set(allIds));
     };
 
-    const detailedProduct = detailQuery.data?.product;
+    // --- FIX START: Use Detail Query Data ---
+    const detailedProduct = (detailQuery.data?.supplierProducts as any)?.items?.[0] || null;
     const isDetailInStore = detailedProduct?.channels?.some((c: any) => c.id === currentChannelId);
+    // --- FIX END ---
 
     if (isLoading) return <div className="p-12 flex justify-center"><Loader className="animate-spin text-blue-600" /></div>;
 
@@ -294,10 +319,11 @@ export function SupplierDetailComponent() {
                         variant='inverse'
                         isOpen={!!viewProductId}
                         onClose={() => setViewProductId(null)}
-                        isLoading={detailQuery.isLoading}
+                        // --- FIX: Use detailQuery loading state ---
+                        isLoading={detailQuery.isLoading || detailQuery.isFetching}
                         product={detailedProduct}
                         commission={commissionRate}
-                        actionButton={!isDetailInStore && (
+                        actionButton={detailedProduct && !isDetailInStore && (
                             <button onClick={() => { addProduct({ productId: viewProductId! }); setViewProductId(null); }}>
                                 <Package size={16} /> Add to Store
                             </button>

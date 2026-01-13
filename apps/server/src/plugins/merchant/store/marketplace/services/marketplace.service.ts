@@ -35,6 +35,24 @@ export class MarketplaceService {
         });
     }
 
+    // --- FIX START: Helper to switch context to Supplier Channel ---
+    private async getSupplierContext(ctx: RequestContext, supplierChannelId: ID): Promise<RequestContext> {
+        const supplierChannel = await this.connection.getRepository(ctx, Channel).findOne({ where: { id: supplierChannelId } });
+        if (!supplierChannel) {
+            throw new Error(`Supplier Channel ${supplierChannelId} not found`);
+        }
+        return new RequestContext({
+            apiType: 'admin',
+            isAuthorized: true,
+            authorizedAsOwnerOnly: false,
+            channel: supplierChannel, // Switch channel context so relations (variants) are visible
+            languageCode: ctx.languageCode,
+            session: ctx.session,
+            req: ctx.req,
+        });
+    }
+    // --- FIX END ---
+
     private applyFilters(
         qb: SelectQueryBuilder<Product>, 
         ctx: RequestContext, 
@@ -209,14 +227,27 @@ export class MarketplaceService {
             stockCountQb.getCount()
         ]);
 
-        // --- HYDRATE ---
+        // --- HYDRATE (UPDATED TO USE SUPPLIER CONTEXT) ---
         const pageIds = rawResults.map((r: any) => r.id);
         let items: Product[] = [];
         if (pageIds.length > 0) {
-            const hydratedItems = await productRepo.find({
+            // FIX START: Switch to Supplier context to bypass Merchant channel filter on relations
+            const supplierCtx = await this.getSupplierContext(ctx, supplierChannelId);
+            
+            const hydratedItems = await this.connection.getRepository(supplierCtx, Product).find({
                 where: { id: In(pageIds) },
-                relations: ['featuredAsset', 'channels', 'customFields', 'variants', 'variants.stockLevels']
+                relations: [
+                    'featuredAsset', 
+                    'assets', 
+                    'channels', 
+                    'customFields', 
+                    'variants', 
+                    'variants.options', 
+                    'variants.stockLevels',
+                    'variants.productVariantPrices'
+                ]
             });
+            // FIX END
             items = pageIds.map((id: any) => hydratedItems.find(p => p.id === id)).filter((x: any) => x) as Product[];
         }
 
@@ -247,7 +278,6 @@ export class MarketplaceService {
         };
     }
 
-    // ... (Helpers: getMarketplaceSuppliers, assignProductToChannel, etc. unchanged)
     async getMarketplaceSuppliers(ctx: RequestContext) {
         return this.connection.getRepository(ctx, Channel)
             .createQueryBuilder('channel')
