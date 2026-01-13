@@ -10,6 +10,9 @@
       ],
       "@/vdb/*": [
         "../.././node_modules/@vendure/dashboard/src/lib/*"
+      ],
+      "@lesuto/ui": [
+        "./src/plugins/lesuto-ui"
       ]
     }
   },
@@ -17,6 +20,6 @@
     "src/plugins/**/dashboard/*",
     "src/gql/**/*.ts",
     "vite.*.*ts",
-    "src/lesuto-ui/**/*"
+    "src/plugins/lesuto-ui/**/*"
   ]
 }

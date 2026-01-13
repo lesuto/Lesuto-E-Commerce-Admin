@@ -14,12 +14,12 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {
-      "@lesuto/ui": ["src/lesuto-ui"]
+      "@lesuto/ui": ["src/plugins/lesuto-ui"]
     }
   },
   "include": [
     "src/**/*.ts",
-    "src/lesuto-ui/**/*.ts"
+    "src/plugins/lesuto-ui/**/*.ts"
   ],
   "exclude": [
     "node_modules",

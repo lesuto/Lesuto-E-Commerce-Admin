@@ -18,8 +18,6 @@ import {
   SearchBox 
 } from '@lesuto/ui';
 
-import '@lesuto/ui/css/ui-surfaces.css';
-
 // --- QUERIES (Unchanged) ---
 const GET_MY_PRODUCTS_PAGINATED = graphql(`
   query GetMyProductsPaginated($options: ProductListOptions) {
