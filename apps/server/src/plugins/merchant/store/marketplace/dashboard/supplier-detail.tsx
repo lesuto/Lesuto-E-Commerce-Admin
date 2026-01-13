@@ -54,6 +54,7 @@ const GET_PRODUCT_DETAIL = graphql(`
       channels { id }, 
       customFields { basePrice ownercompany },
       variants { id, name, sku, price, stockOnHand }
+      assets {id, preview}
     }
   }
 `);
@@ -290,12 +291,14 @@ export function SupplierDetailComponent() {
 
                     {/* Overlays */}
                     <ProductDetailModal
+                        variant='inverse'
                         isOpen={!!viewProductId}
                         onClose={() => setViewProductId(null)}
                         isLoading={detailQuery.isLoading}
                         product={detailedProduct}
+                        commission={commissionRate}
                         actionButton={!isDetailInStore && (
-                            <button onClick={() => { addProduct({ productId: viewProductId! }); setViewProductId(null); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shadow-sm transition-colors">
+                            <button onClick={() => { addProduct({ productId: viewProductId! }); setViewProductId(null); }}>
                                 <Package size={16} /> Add to Store
                             </button>
                         )}

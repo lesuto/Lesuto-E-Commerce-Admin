@@ -60,12 +60,12 @@ export const CategoryCard: React.FC<CategoryCardProps> = (props) => {
         </div>
 
         <div className="flex flex-col space-y-3 mt-auto">
-          <button
+          {/* <button
             onClick={props.onAddCatalog}
             className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 active:scale-[0.98] transition-all shadow-sm"
           >
             Add Entire Catalog
-          </button>
+          </button> */}
 
           <button
             onClick={props.onViewProfile}

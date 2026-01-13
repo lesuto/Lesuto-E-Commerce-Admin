@@ -82,6 +82,7 @@ export function MarketplaceComponent() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {suppliers.map((s: any) => (
                                     <CategoryCard
+                                        variant='inverse'
                                         key={s.id}
                                         name={s.supplierProfile?.nameCompany || s.code}
                                         logo={s.supplierProfile?.logo?.preview}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Eye, Plus, Trash2, CheckSquare, Square, Store } from 'lucide-react';
 
 export type CardVariant = 'standard' | 'inverse';
@@ -15,13 +15,14 @@ interface ProductGridCardProps {
   onView: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onToggle?: (e: React.MouseEvent) => void;
-  variant?: CardVariant; // <--- NEW SETTING
+  variant?: CardVariant;
 }
 
 export const ProductGridCard: React.FC<ProductGridCardProps> = ({
   name, image, supplierName, retailPrice, earnings, isAdded, isSelected, stockLevel, onView, onSelect, onToggle,
-  variant = 'inverse' // Defaults to Black/Inverse style
+  variant = 'inverse'
 }) => {
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const styles = {
     standard: {
@@ -29,18 +30,39 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
       imageBg: "bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-700",
       title: "text-gray-900 dark:text-white",
       subText: "text-gray-500 dark:text-gray-400",
-      priceLabel: "text-gray-400"
+      // Retail Section
+      retailLabel: "text-white-500",
+      retailValue: "text-white-900",
+      // Earn Section
+      earnBg: "bg-emerald-50",
+      earnText: "text-emerald-600",
     },
     inverse: {
       card: "bg-gray-900 border-gray-700",
       imageBg: "bg-gray-800 border-gray-700",
-      title: "text-white", // <--- Fixes readability
+      title: "text-white",
       subText: "text-gray-400",
-      priceLabel: "text-gray-500"
+      // Retail Section - ALL WHITE
+      retailLabel: "text-white", 
+      retailValue: "text-white", 
+      // Earn Section
+      earnBg: "bg-emerald-100",
+      earnText: "text-emerald-400",
     }
   };
 
   const s = styles[variant];
+
+  const handleRemoveClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (showConfirm && onToggle) {
+      onToggle(e);
+      setShowConfirm(false);
+    } else {
+      setShowConfirm(true);
+      setTimeout(() => setShowConfirm(false), 3000);
+    }
+  };
 
   return (
     <div
@@ -53,19 +75,21 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
     >
       {/* Image Area */}
       <div className={`aspect-square relative overflow-hidden border-b ${s.imageBg}`}>
-        {/* Badge */}
-        {stockLevel !== undefined && (
-          <div className={`absolute top-2 left-2 px-2 py-1 text-[10px] font-bold uppercase rounded-md shadow-sm z-10 
+        
+        {/* Stock Badge - Top Left Corner, No Border */}
+          <div className={`absolute top-0 left-0 px-2 py-1 text-[10px] font-bold uppercase z-10 
             ${stockLevel > 0 
-              ? 'bg-white/90 text-gray-700 border border-gray-200 backdrop-blur-sm' 
-              : 'bg-red-100 text-red-700 border border-red-200'}
+              ? 'bg-black/50 text-white backdrop-blur-sm rounded-br-lg' 
+              : 'bg-red-600 text-white rounded-br-lg'}
           `}>
             {stockLevel > 0 ? `${stockLevel} in stock` : 'Out of Stock'}
           </div>
-        )}
 
         {/* Checkbox */}
-        <button onClick={onSelect} className="absolute top-2 right-2 z-20 p-1.5 bg-white/10 backdrop-blur-md rounded-md shadow-sm transition-transform hover:scale-105 border border-white/20">
+        <button 
+          onClick={(e) => { e.stopPropagation(); onSelect(e); }} 
+          className="absolute top-2 right-2 z-20 p-1.5 bg-white/10 backdrop-blur-md rounded-md shadow-sm transition-transform hover:scale-105 border border-white/20"
+        >
           {isSelected ? <CheckSquare size={18} className="text-blue-500" /> : <Square size={18} className="text-white/70" />}
         </button>
 
@@ -76,7 +100,7 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
         )}
 
         {isAdded && (
-          <div className="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wide z-10">
+          <div className="absolute bottom-2 right-2 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wide z-10">
             Synced
           </div>
         )}
@@ -95,29 +119,42 @@ export const ProductGridCard: React.FC<ProductGridCardProps> = ({
         </div>
 
         <div className="mt-auto space-y-3">
-          <div className="flex justify-between items-baseline text-xs">
-            <span className={`uppercase font-bold tracking-wider ${s.priceLabel}`}>Retail</span>
-            <span className={`font-mono font-medium ${s.title}`}>{retailPrice}</span>
+          {/* Retail Price Row */}
+          <div className="flex justify-between items-baseline text-xs px-1">
+            <span className={`uppercase font-bold tracking-wider ${s.retailLabel}`}>Retail</span>
+            <span className={`font-bold ${s.retailValue}`}>{retailPrice}</span>
           </div>
           
-          <div className="flex justify-between items-center text-xs bg-emerald-500/10 border border-emerald-500/20 px-2 py-1.5 rounded">
-            <span className="text-emerald-500 uppercase font-bold tracking-wider">Earn</span>
-            <span className="text-emerald-500 font-bold">{earnings}</span>
+          {/* Earn Row - UPDATED EXACTLY AS REQUESTED */}
+          <div className="flex justify-between items-center px-3 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg text-xs font-bold border border-emerald-200 dark:border-emerald-800 shadow-sm">
+            <span className="uppercase tracking-widest text-[10px]">Earn</span>
+            <span className="text-sm">{earnings}</span>
           </div>
 
+          {/* Add / Remove Button */}
           {onToggle ? (
             <button
-              onClick={onToggle}
+              onClick={isAdded ? handleRemoveClick : (e) => { e.stopPropagation(); onToggle(e); }}
               className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-bold transition-all ${
                 isAdded
-                  ? 'bg-transparent border border-red-500/50 text-red-500 hover:bg-red-500/10' 
-                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                  ? showConfirm 
+                    ? 'bg-red-600 text-white animate-pulse' 
+                    : 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500 hover:text-white' 
+                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-[0.98]'
               }`}
             >
-              {isAdded ? <><Trash2 size={14} /> Remove</> : <><Plus size={14} /> Add to Store</>}
+              {isAdded ? (
+                showConfirm ? (
+                  <>Are you sure?</>
+                ) : (
+                  <><Trash2 size={14} /> Remove</>
+                )
+              ) : (
+                <><Plus size={14} /> Add to Store</>
+              )}
             </button>
           ) : (
-            <div className="w-full py-2.5 rounded-lg text-xs font-bold text-center text-green-400 bg-green-500/10 border border-green-500/20">
+            <div className="w-full py-2.5 rounded-lg text-xs font-bold text-center text-emerald-500 bg-emerald-500/10 border border-emerald-500/20">
               ✔ In Your Catalog
             </div>
           )}
