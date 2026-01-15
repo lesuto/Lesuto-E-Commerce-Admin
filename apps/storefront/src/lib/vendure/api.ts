@@ -41,6 +41,9 @@ export async function query<TResult, TVariables>(
     // This prevents the "headers() inside cache" crash.
     reqHeaders[VENDURE_CHANNEL_TOKEN_HEADER] = channelToken || VENDURE_CHANNEL_TOKEN;
 
+    console.log(`[API Query] URL: ${VENDURE_API_URL}`);
+console.log(`[API Query] Header [${VENDURE_CHANNEL_TOKEN_HEADER}]: ${reqHeaders[VENDURE_CHANNEL_TOKEN_HEADER]}`);
+
     const response = await fetch(VENDURE_API_URL!, {
         ...fetchOptions,
         method: 'POST',

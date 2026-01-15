@@ -58,11 +58,14 @@ export const viewport: Viewport = {
 export default function RootLayout({children}: LayoutProps<'/'>) {
     return (
         <html lang="en" suppressHydrationWarning>
+            {/* Added style isolation to fix the hydration warning */}
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
+                style={{ isolation: 'isolate' } as React.CSSProperties}
             >
                 <ThemeProvider>
-                    <Suspense fallback={<div>Loading...</div>}>
+                    <Suspense fallback={<div>Loading Store...</div>}>
+                        {/* DynamicContent MUST be here to provide the Channel Context */}
                         <DynamicContent>{children}</DynamicContent>
                     </Suspense>
                 </ThemeProvider>

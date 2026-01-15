@@ -2,15 +2,32 @@ import { graphql } from '@/graphql';
 import { ActiveCustomerFragment, ProductCardFragment } from './fragments';
 
 export const GetTopCollectionsQuery = graphql(`
-    query GetTopCollections {
-        collections(options: { filter: { parentId: { eq: "1" } } }) {
-            items {
-                id
-                name
-                slug
-            }
+  query GetTopCollections($options: CollectionListOptions) {
+    collections(options: $options) {
+      items {
+        id
+        name
+        slug
+        parent {
+          name
         }
+        productVariants {
+          totalItems
+        }
+        # --- ADD THIS BLOCK ---
+        children {
+          id
+          name
+          slug
+          featuredAsset {
+            id
+            preview
+          }
+        }
+        # ----------------------
+      }
     }
+  }
 `);
 
 export const GetActiveCustomerQuery = graphql(`
@@ -426,6 +443,17 @@ export const GetCollectionProductsQuery = graphql(`
                 id
                 preview
             }
+            # --- NEW: Fetch Sub-Collections ---
+            children {
+                id
+                name
+                slug
+                featuredAsset {
+                    id
+                    preview
+                }
+            }
+            # ----------------------------------
         }
         search(input: $input) {
             totalItems

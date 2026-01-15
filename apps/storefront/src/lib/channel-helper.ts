@@ -8,7 +8,7 @@ export const getChannelToken = cache(async () => {
     try {
         const headersList = await headers();
         const host = headersList.get('host') || '';
-        
+
         // Parse Subdomain
         const subdomain = host.split(':')[0].split('.')[0].toLowerCase();
 
@@ -30,8 +30,8 @@ export const getChannelToken = cache(async () => {
                         query: `query GetChannelToken($channelCode: String!) { getChannelToken(channelCode: $channelCode) }`,
                         variables: { channelCode: subdomain },
                     }),
-                    // Cache for 1 hour to prevent hitting DB constantly
-                    next: { revalidate: 3600 } 
+                    // CHANGE THIS TEMPORARILY TO 0 TO BUST CACHE
+                    next: { revalidate: 0 }
                 });
 
                 if (!response.ok) throw new Error(`Status ${response.status}`);
@@ -42,8 +42,8 @@ export const getChannelToken = cache(async () => {
             } catch (error) {
                 // If it fails, wait a bit and try again
                 if (attempt < 3) {
-                    await wait(300 * attempt); 
-                    continue; 
+                    await wait(300 * attempt);
+                    continue;
                 }
                 // Only log if it truly fails after 3 tries
                 console.error(`Failed to get token for ${subdomain} after 3 attempts.`);

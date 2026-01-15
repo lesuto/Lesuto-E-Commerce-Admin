@@ -15,17 +15,24 @@ export function Navbar() {
             <div className="container mx-auto px-4">
                 <div className="flex items-center justify-between h-16">
                     <div className="flex items-center gap-8">
-                        <Link href="/" className="text-xl font-bold">
-                            <Image src="/vendure.svg" alt="Vendure" width={40} height={27} className="h-6 w-auto dark:invert" />
+                        <Link href="/" className="flex items-center">
+                            <Image
+                                src="/lesuto-logo.png"
+                                alt="Lesuto"
+                                width={120}
+                                height={40}
+                                className="h-8 w-auto"
+                                priority
+                            />
                         </Link>
-                        <nav className="hidden md:flex items-center gap-6">
+                        <nav className="md:flex items-center gap-6">
                             <Suspense>
-                                <NavbarCollections/>
+                                <NavbarCollections />
                             </Suspense>
                         </nav>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="hidden lg:flex">
+                        <div className="lg:flex">
                             <Suspense fallback={<SearchInputSkeleton />}>
                                 <SearchInput/>
                             </Suspense>

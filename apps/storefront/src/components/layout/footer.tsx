@@ -37,8 +37,7 @@ export async function Footer() {
                     <div className="md:col-span-3">
                          <h3 className="font-semibold mb-4">About</h3>
                          <p className="text-sm text-muted-foreground">
-                             &copy; {new Date().getFullYear()} Lesuto Storefront.
-                         </p>
+                        &copy; {new Date().getFullYear()} Powered By Lesuto™ – Let's Succeed Together                         </p>
                     </div>
                 </div>
             </div>
