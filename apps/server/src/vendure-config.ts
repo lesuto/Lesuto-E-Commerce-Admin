@@ -7,28 +7,46 @@ import {
     DefaultProductVariantPriceUpdateStrategy
 } from '@vendure/core';
 import { ElasticsearchPlugin } from '@vendure/elasticsearch-plugin';
-import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { EmailPlugin, defaultEmailHandlers, FileBasedTemplateLoader } from '@vendure/email-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
-import { ThemePlugin } from './plugins/theme/login/login-plugin';
-import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
-import { CustomPermissionsRolesPlugin } from './plugins/custom-permissions-roles';
-import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins';
+import { AssetServerPlugin, configureS3AssetStorage } from '@vendure/asset-server-plugin';
+import 'dotenv/config';
+import path from 'path';
+
+//----------------------------------------------------------//
+// Lesuto Imports
+//----------------------------------------------------------//
+//Strategies
+import { StandardizedNamingStrategy } from './strategies/standardized-naming-strategy';
+
+//Plugins - Administration
+import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
+import { GlobalVariantConfigurationPlugin } from './plugins/global-variant-configuration/global-variant-configuration.plugin';
+
+//Plugins - Merchants
 import { MerchantMarketplacePlugin } from './plugins/merchant/store/marketplace/marketplace.plugin';
 import { MerchantInventoryPlugin } from './plugins/merchant/store/inventory/inventory.plugin';
 import { MerchantBillingPlugin } from './plugins/merchant/account/billing/billing.plugin';
 import { MerchantProfilePlugin } from './plugins/merchant/account/profile/profile.plugin';
+import { CmsPlugin } from './plugins/cms/cms.plugin';
+import { TenantPlugin } from './plugins/tenant/tenant.plugin';
+
+//Plugins - Permissions
+import { CustomPermissionsRolesPlugin } from './plugins/custom-permissions-roles';
+import { CustomPermissionsChannelsPlugin } from './plugins/custom-permissions-channels/custom-permissions-channel.plugins';
+
+//Plugins - Suppliers
 import { SupplierProfilePlugin } from './plugins/supplier/account/profile/profile.plugin';
 import { SupplierBillingPlugin } from './plugins/supplier/account/billing/billing.plugin';
 import { SupplierOwnershipPlugin } from './plugins/supplier/ownership/ownership.plugin';
+
+//Plugins - UI
+import { NavigationPlugin } from './plugins/navigation/navigation.plugin';
 import { GlobalLoadingScreenPlugin } from './plugins/global-loading-screen/global-loading-screen.plugin';
-import { GlobalFacetConfigurationPlugin } from './plugins/global-facet-configuration/global-facet-configuration.plugin';
-import { GlobalVariantConfigurationPlugin } from './plugins/global-variant-configuration/global-variant-configuration.plugin';
-import { TenantPlugin } from './plugins/tenant/tenant.plugin';
-import { CmsPlugin } from './plugins/cms/cms.plugin';
-import 'dotenv/config';
-import path from 'path';
+import { ThemePlugin } from './plugins/theme/login/login-plugin';
+
+
 
 const IS_DEV = process.env.APP_ENV === 'dev';
 const serverPort = +process.env.PORT || 3000;
@@ -84,14 +102,34 @@ export const config: VendureConfig = {
         paymentMethodHandlers: [dummyPaymentHandler],
     },
     plugins: [
+       AssetServerPlugin.init({
+            route: 'assets',
+            assetUploadDir: path.join(__dirname, 'assets'),
+            namingStrategy: new StandardizedNamingStrategy(),
+            
+            // 👇 ADD THIS LINE to force direct S3 URLs
+            assetUrlPrefix: `https://${process.env.AWS_BUCKET_NAME}.s3.amazonaws.com/`,
+
+            storageStrategyFactory: configureS3AssetStorage({
+                bucket: process.env.AWS_BUCKET_NAME!, 
+                credentials: {
+                    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+                    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+                },
+                nativeS3Configuration: {
+                    region: process.env.AWS_REGION,
+                },
+            }),
+        }),
         ThemePlugin,
         NavigationPlugin.init({}),
         GraphiqlPlugin.init(),
-        AssetServerPlugin.init({
-            route: 'assets',
-            assetUploadDir: path.join(__dirname, '../static/assets'),
-            assetUrlPrefix: IS_DEV ? undefined : 'https://www.my-shop.com/assets/',
-        }),
+        // To save files locally
+        // AssetServerPlugin.init({
+        //     route: 'assets',
+        //     assetUploadDir: path.join(__dirname, '../static/assets'),
+        //     assetUrlPrefix: IS_DEV ? undefined : 'https://www.my-shop.com/assets/',
+        // }),
         DefaultSchedulerPlugin.init(),
         DefaultJobQueuePlugin.init({ useDatabaseForBuffer: true }),
         

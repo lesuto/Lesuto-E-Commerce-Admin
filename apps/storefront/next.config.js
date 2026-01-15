@@ -1,11 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    // 1. MUST be inside 'experimental' object
     cacheComponents: true,
   },
 
-  // 2. MUST list exact domains (Wildcards like *.local do NOT work here)
+  // This is correct for Next.js 14+ (it moved from 'experimental' to root)
   allowedDevOrigins: [
     'shop.lesuto.local:3000',
     'shop.lesuto.local:3001',
@@ -16,7 +15,6 @@ const nextConfig = {
   ],
 
   images: {
-    // 3. Disables security check for localhost images
     unoptimized: process.env.NODE_ENV === 'development',
     remotePatterns: [
       {
@@ -30,6 +28,12 @@ const nextConfig = {
         hostname: 'localhost',
         port: '3000',
         pathname: '/assets/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.s3.amazonaws.com', // Wildcard for all your S3 buckets
+        port: '',
+        pathname: '/**',
       },
     ],
   },

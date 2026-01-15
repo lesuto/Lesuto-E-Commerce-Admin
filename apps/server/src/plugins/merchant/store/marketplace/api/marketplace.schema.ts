@@ -30,8 +30,35 @@ export const marketplaceSchema = gql`
         outOfStock: Int
     }
 
+    # --- NEW TYPES TO BYPASS STANDARD RESOLVERS ---
+    type MarketplaceVariant {
+        id: ID!
+        createdAt: DateTime!
+        updatedAt: DateTime!
+        name: String!
+        sku: String!
+        price: Float!
+        stockOnHand: Int! # Pre-calculated in service
+        options: [ProductOption!]!
+    }
+
+    type MarketplaceProduct {
+        id: ID!
+        createdAt: DateTime!
+        updatedAt: DateTime!
+        name: String!
+        description: String
+        enabled: Boolean!
+        featuredAsset: Asset
+        assets: [Asset!]!
+        variants: [MarketplaceVariant!]!
+        customFields: JSON
+        channels: [Channel!]!
+    }
+    # ----------------------------------------------
+
     type SupplierProductList {
-        items: [Product!]!
+        items: [MarketplaceProduct!]! # Changed from Product!
         totalItems: Int!
         collections: [CollectionCount!]!
         facets: [FacetCount!]!
